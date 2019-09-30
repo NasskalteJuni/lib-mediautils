@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="sendForm.js"></script>
+</head>
+<body>
+<form name="login" action="/auth/login" method="POST">
+    <input name="name" type="text" placeholder="name" required>
+    <input name="password" type="password" placeholder="password" required>
+    <button type="submit">Login</button>
+    <p id="error"></p>
+</form>
+<script>
+    var form = document.login;
+    form.addEventListener('submit', function login(e){
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        sendForm('/auth/login')
+            .then(() => location.href = '/lobby.html')
+            .catch(err => document.getElementById('error').innerText=err);
+    });
+</script>
+</body>
+</html>

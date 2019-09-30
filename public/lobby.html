@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Lobby</title>
+    <script src="./handle.js"></script>
+    <script src="./sendForm.js"></script>
+    <script src="./Call.js"></script>
+</head>
+<body>
+    <header>
+        <a href="create.html">Create new Lobby</a>
+    </header>
+    <main>
+        <div id="lobby">
+            <video id="video" autoplay></video>
+            <ul id="messages">
+
+            </ul>
+            <form name="send" method="POST">
+                <input type="text" placeholder="..." name="message">
+                <button type="submit">Senden</button>
+            </form>
+            <video id="v"></video>
+        </div>
+        <div id="list">
+
+        </div>
+    </main>
+    <script>
+        (async () => {
+            const query = new URLSearchParams(window.location.search);
+            const lobbyId = query.get("id");
+            if(lobbyId){
+                document.getElementById('list').style.display = 'none';
+                await fetch('/lobby/'+lobbyId+'/users', {method: 'POST'});
+                const es = new EventSource('/lobby/'+lobbyId+'/updates');
+                es.send = msg => fetch('/lobby/'+lobbyId+'/server',{method: 'POST', body: JSON.stringify(msg), headers: {"Accept":"application/json","Content-Type":"application/json"}});
+                es.addEventListener('message', e => document.getElementById('messages').innerText += e.data);
+                es.addEventListener('open', () => console.log('opened event stream'));
+                es.addEventListener('error', e => console.error(e));
+                es.addEventListener('close', () => console.log('closed event stream'));
+                document.send.addEventListener('submit', function send(e) {
+                    e.preventDefault();
+                    sendForm('/lobby/'+lobbyId+'/message').then(() => document.send.message.value = "").catch(console.error);
+                    return false;
+                });
+                window.call = new Call(es);
+                window.unlockMedia = async () =>  window.call.addMedia(await navigator.mediaDevices.getUserMedia({video: true, audio: true}));
+            }else{
+                document.getElementById('lobby').style.display = 'none';
+                fetch('/lobbies/').then(handle).then(response => response.json()).then(lobbies => '<ul>'+lobbies.map(lobby => `<li><a href="/lobby.html?id=${lobby.id}">${lobby.name}</a></li>`).join('\n')+'</ul>').then(html => document.getElementById('list').innerHTML = html).catch(console.error);
+            }
+        })();
+    </script>
+</body>
+</html>

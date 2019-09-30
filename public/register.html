@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="sendForm.js"></script>
+</head>
+<body>
+<form name="register" method="POST" action="/auth/register">
+    <input name="name" type="text" placeholder="name">
+    <input name="password" type="password" placeholder="password">
+    <button type="submit">Register</button>
+    <p id="error"></p>
+</form>
+<script>
+    document.register.addEventListener('submit', function create(e){
+        e.preventDefault();
+        sendForm('/auth/register').then(() => location.href = '/login.html').catch(err => document.getElementById('error').innerText = err);
+        return false;
+    });
+</script>
+</body>
+</html>
