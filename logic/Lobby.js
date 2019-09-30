@@ -1,4 +1,4 @@
-const Server = require('../mcu/Server.js');
+const Server = require('../mcu/MCUServerModule.js');
 
 const LobbyState = Object.freeze({
     SEARCHING: 'searching',

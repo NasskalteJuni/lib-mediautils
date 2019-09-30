@@ -11,9 +11,10 @@ class Call{
             console.log(e.data, this._pc.signalingState, this._pc.iceConnectionState, this._pc.iceGatheringState);
             const candidate = JSON.parse(e.data);
             this._pc.addIceCandidate(candidate).catch(error => {
-                console.warn('FAILED TO ADD CANDIDATE, TRY AGAIN AFTER SHORT TIME', error);
                 if(!this._pc.remoteDescription){
                     const t = setTimeout(() => clearTimeout(t) || this._pc.addIceCandidate(candidate).catch(console.error), 500);
+                }else{
+                    console.error(error);
                 }
             })
         });

@@ -7,69 +7,21 @@
 <body>
     <canvas id="canvas" width="640" height="480" style="width: 640px; height: 480px;"></canvas>
     <script>
-        const canvas = document.getElementById("canvas");
-        const context = canvas.getContext('2d');
-        const out = canvas.captureStream(30);
-        const peerConnections = {};
-        setInterval(() => {
-            Object.values(peerConnections).filter(connection => connection._video).forEach((connection, i, list) => context.drawImage(connection._video,i*canvas.width/list.length,0,canvas.width/list.length,canvas.height));
-        },1000/30);
-        function display(userId, e){
-            if(e.track.kind === "video"){
-                const video = document.createElement('video');
-                video.id = userId;
-                video.srcObject = e.streams[0] || new MediaStream([e.track]);
-                video.autoplay = true;
-                video.play();
-                getPeerConnection(userId)._video = video;
-                document.body.appendChild(video);
+        window.connections = new MCUConnectionManager();
+        window.mixer = new MCUVideoMixer('#canvas', fps);
+        connections.onNewPeerConnection(function(userId, peerConnection){
+            peerConnection.addTransceiver(mixer.outputTrack, {direction: 'sendonly', streams: [mixer.out]});
+        });
+        connections.onTrackHandle(function(userId, track, streams){
+            if(track.kind === "video"){
+                const stream = streams && streams.length ? streams[0] : new MediaStream([track]);
+                mixer.addStream(stream, userId);
             }
-            if(e.track.kind === "audio"){
-                getPeerConnection(userId)._audio = e.track;
-                console.log(e);
-            }
-            return true;
-        }
-
-        function getPeerConnection(userId){
-            if(!peerConnections[userId]){
-                peerConnections[userId] = new RTCPeerConnection({sdpSemantics: 'unified-plan', iceServers: [{"urls": "stun:stun1.l.google.com:19302"}]});
-                peerConnections[userId].onicecandidate = e => e.candidate ? window.onIceCandidateHandle(userId, e.candidate) : false;
-                peerConnections[userId].onnegotiationneeded = e => start(userId);
-                peerConnections[userId].ontrack = e => display(userId, e);
-                peerConnections[userId].onclose = e => delete peerConnections[userId];
-            }
-            return peerConnections[userId];
-        }
-        async function start(userId){
-            const pc = getPeerConnection(userId);
-            if(pc.signalingState !== "stable") return;
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            window.onOfferHandle(userId, offer);
-            return offer;
-        }
-        async function accept(userId, offer){
-            const pc = getPeerConnection(userId);
-            if(pc.signalingState !== "stable"){
-                await pc.setLocalDescription({type: 'rollback'});
-                await pc.setRemoteDescription(offer);
-                return null;
-            }else{
-                await pc.setRemoteDescription(offer);
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                return answer;
-            }
-        }
-        async function complete(userId, answer){
-            const pc = getPeerConnection(userId);
-            await pc.setRemoteDescription(answer);
-        }
-        async function addIceCandidate(userId, candidate){
-            const pc = getPeerConnection(userId);
-            return candidate !== null ? pc.addIceCandidate(candidate) : Promise.resolve();
-        }
+        });
+        connections.onDisconnect(function(userId){
+            mixer.removeStream(userId);
+        });
+        mixer.mix();
     </script>
 </body>
 </html>
