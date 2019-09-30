@@ -1,3 +1,4 @@
+//TODO: REMEMBER TO INSERT REAL VALUES HERE WHEN PLACING THIS ON THE SERVER
 module.exports = {
     port: 8808,
     session: {
