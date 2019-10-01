@@ -8,20 +8,26 @@
     <canvas id="canvas" width="640" height="480" style="width: 640px; height: 480px;"></canvas>
     <script>
         window.connections = new MCUConnectionManager();
-        window.mixer = new MCUVideoMixer('#canvas', fps);
+        window.videoMixer = new MCUVideoMixer('#canvas', fps);
+        window.audioMixer = new MCUAudioMixer();
         connections.onNewPeerConnection(function(userId, peerConnection){
-            peerConnection.addTransceiver(mixer.outputTrack, {direction: 'sendonly', streams: [mixer.out]});
+            peerConnection.addTransceiver(videoMixer.outputTrack, {direction: 'sendonly', streams: [videoMixer.out]});
+            peerConnection.addTransceiver(audioMixer.outputTrack, {direction: 'sendonly', streams: [audioMixer.out]});
         });
         connections.onTrackHandle(function(userId, track, streams){
             if(track.kind === "video"){
                 const stream = streams && streams.length ? streams[0] : new MediaStream([track]);
-                mixer.addStream(stream, userId);
+                videoMixer.addStream(stream, userId);
+            }
+            if(track.kind === "audio"){
+                const stream = streams && streams.length ? streams[0] : new MediaStream([track]);
+                audioMixer.addStream(stream, userId);
             }
         });
         connections.onDisconnect(function(userId){
-            mixer.removeStream(userId);
+            videoMixer.removeStream(userId);
         });
-        mixer.mix();
+        videoMixer.mix();
     </script>
 </body>
 </html>

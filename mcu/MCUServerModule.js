@@ -27,6 +27,7 @@ class MCUServerModule{
             await this._instance.addScriptTag({path: require.resolve('./MCUConnectionManager')});
             await this._instance.evaluate(fps => window["fps"] = fps, this._fps);
             await this._instance.addScriptTag({path: require.resolve('./MCUVideoMixer.js')});
+            await this._instance.addScriptTag({path: require.resolve('./MCUAudioMixer.js')});
             await this._instance.setContent(read(require.resolve('./template.html'),'utf-8'));
             await this._instance.evaluate(title => document.title = title, this._id);
             this._isInitialized=true;
