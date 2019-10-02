@@ -2,12 +2,15 @@ class MCUVideoMixer{
 
     /**
      * create a new video mixer
-     * @param canvas a canvas element to use for mixing MediaStreams together. Can be null (creates new), an element, or a query selector string like 'div.main>#canvas'
-     * @param fps [int=30] frames per second used for mixing & sampling
+     * @param config [object] a configuration object
+     * @param config.canvas (optional) a canvas element to use for mixing MediaStreams together. Can be null (default, creates new), an element, or a query selector string like 'div.main>#canvas'
+     * @param config.fps [int=30] frames per second used for mixing & sampling
+     * @param config.startImmediately [boolean=true] tells the mixer to start the mixing as soon as the object is constructed (no waiting for call to .start())
      * */
-    constructor(canvas, fps=30){
+    constructor({canvas = null, fps = 30, startImmediately = true} = {}){
         this._in = {};
-        this._initCanvas(canvas)
+        this._initCanvas(canvas);
+        if(startImmediately) this.start();
     }
 
     _initCanvas(canvas){
@@ -55,11 +58,10 @@ class MCUVideoMixer{
      * @param id the id used to add the media stream
      * */
     removeStream(id){
-
         delete this._in[id];
     }
 
-    mix(){
+    start(){
         this._paintloop = setInterval(() => {
             Object.keys(this._in)
                 .forEach((id, i, list) => {
