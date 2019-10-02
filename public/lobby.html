@@ -46,6 +46,13 @@
                     return false;
                 });
                 window.call = new Call(es);
+                const video = document.getElementById('video');
+                const videoInput = new MediaStream([]);
+                video.srcObject = videoInput;
+                call.onTrack(track => {
+                    track.addEventListener('ended', videoInput.removeTrack(track));
+                    videoInput.addTrack(track);
+                });
                 window.unlockMedia = async () =>  window.call.addMedia(await navigator.mediaDevices.getUserMedia({video: true, audio: true}));
             }else{
                 document.getElementById('lobby').style.display = 'none';

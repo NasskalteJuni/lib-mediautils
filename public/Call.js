@@ -4,8 +4,8 @@ class Call{
         this._io = signallingChannel;
         this._pc = new RTCPeerConnection({iceServers, sdpSemantics:'unified-plan'});
         this._pc.addEventListener('icecandidate', e => e.candidate ? this._io.send({type: 'ice', content: e.candidate }) : false);
-        this._pc.addEventListener('track', e => console.log(e) || (document.getElementById('video').srcObject = e.streams.length ? e.streams[0] : new MediaStream([e.track])));
         this._pc.addEventListener('negotiationneeded', () => this.start());
+        this._pc.addEventListener('track', e => this._onTrack ? this._onTrack(e.track, e.streams) : false);
         this._io.addEventListener('answer', e => console.log(JSON.parse(e.data)) || (this._pc.setRemoteDescription(JSON.parse(e.data))));
         this._io.addEventListener('ice', e => {
             console.log(e.data, this._pc.signalingState, this._pc.iceConnectionState, this._pc.iceGatheringState);
@@ -97,6 +97,15 @@ class Call{
         this._video.stop();
         this._pc.close();
         this._io.close();
+    }
+
+    onTrack(cb){
+        if(typeof cb !== "function") throw new Error("Callback must be a function");
+        this._onTrack = cb;
+    }
+
+    _handleTrack(){
+
     }
 
 }
