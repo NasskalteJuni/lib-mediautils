@@ -63,11 +63,11 @@ class MCUVideoMixer{
 
     start(){
         this._paintloop = setInterval(() => {
+            this._context.fillRect(0,0,this._canvas.width, this._canvas.height);
             Object.keys(this._in)
                 .forEach((id, i, list) => {
                     const video = this._in[id];
                     //TODO: Implement Grid and customizable mixing options
-                    this._context.fillRect(0,0,this._canvas.width, this._canvas.height);
                     this._context.drawImage(video,i*this._canvas.width/list.length,0,this._canvas.width/list.length,this._canvas.height)
                 })
         }, 1000 / fps);
