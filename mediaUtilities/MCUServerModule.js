@@ -29,6 +29,7 @@ class MCUServerModule{
             await this._instance.addScriptTag({path: require.resolve('./MCUVideoMixer.js')});
             await this._instance.addScriptTag({path: require.resolve('./MCUAudioMixer.js')});
             await this._instance.addScriptTag({path: require.resolve('./MCURecorder.js')});
+            await this._instance.addScriptTag({path: require.resolve('./SpeechDetection.js')});
             await this._instance.setContent(read(require.resolve('./template.html'),'utf-8'));
             await this._instance.evaluate(title => document.title = title, this._id);
             this._isInitialized=true;

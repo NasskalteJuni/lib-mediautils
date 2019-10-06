@@ -5,10 +5,10 @@
     <title>initializing...</title>
 </head>
 <body>
-    <canvas id="canvas" width="640" height="480" style="width: 640px; height: 480px;"></canvas>
     <script>
         window.connections = new MCUConnectionManager();
-        window.videoMixer = new MCUVideoMixer({canvas: '#canvas', fps});
+        window.videoMixer = new MCUVideoMixer({canvas: '#canvas', fps, width: 640, height: 480});
+        document.body.appendChild(videoMixer._canvas);
         window.audioMixer = new MCUAudioMixer();
         connections.onNewPeerConnection(function(userId, peerConnection){
             peerConnection.addTransceiver(videoMixer.outputTrack, {direction: 'sendonly', streams: [videoMixer.out]});

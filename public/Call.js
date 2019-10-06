@@ -93,8 +93,12 @@ class Call{
     }
 
     destroy(){
-        this._audio.stop();
-        this._video.stop();
+        try{
+            this._audio.stop();
+            this._video.stop();
+        }catch(err){
+            console.log('missing browser implementation');
+        }
         this._pc.close();
         this._io.close();
     }
