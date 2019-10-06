@@ -4,17 +4,22 @@ class SpeechDetection{
      * creates a speech (or noise) detector,
      * which checks which given Streams are currently loud enough for typical human speech
      * (most parts of this were directly taken or inspired by hark.js https://github.com/latentflip/hark/)
+     * @param config [object]
+     * @param config.treshold [number=-70] a dBFS measure. Positive numbers will be made negative
+     * @param config.samplingInterval [number=100] milliseconds between samples. Higher sample rate equals earlier detection but also more cpu cost
+     * @param config.smoothingConstant [number=0.1] smoothes input to avoid peaks, set values with caution
+     * @param config.requiredSamplesForSpeech [number=5] on how many consecutive samples must be a dBFS value over treshold to be considered speech
      * */
-    constructor(){
+    constructor({treshold=-70, samplingInterval=100, smoothingConstant = 0.1, requiredSamplesForSpeech = 5} = {}){
         this._smoothingConstant = 0.1;
         this._samplingInterval = 100; //ms
-        this._treshold = -75;
+        this._treshold = -Math.abs(treshold);
         this.requiredSamplesForSpeech = 3;
         this._in = {};
         this._out = {};
         this._context = new AudioContext();
-        this._onSpeechStartByUser = () => {};
-        this._onSpeechEndByUser = () => {};
+        this._onSpeechStartByStream = () => {};
+        this._onSpeechEndByStream = () => {};
         this._onSpeechStart = () => {};
         this._onSpeechEnd = () => {};
         this._onSpeakerChange = () => {};
@@ -29,14 +34,14 @@ class SpeechDetection{
             const speechEnd = currentLength === 0 && lastLength > 0;
             const speechStart = currentLength > 0 && lastLength === 0;
             if(speechStart){
-                this._onSpeechStart();
+                this._onSpeechStart(currentSpeakers);
                 this._silence = false;
             }
             if(speechEnd){
-                this._onSpeechEnd();
+                this._onSpeechEnd(currentSpeakers);
                 this._silence = true;
             }
-            if(change) this._onSpeakerChange(currentSpeakers, this._lastSpeakers.slice())
+            if(change) this._onSpeakerChange(currentSpeakers, this._lastSpeakers.slice());
             this._lastSpeakers = currentSpeakers;
         }, this._samplingInterval);
     }
@@ -48,14 +53,25 @@ class SpeechDetection{
         this.treshold = -Math.abs(v);
     }
 
+    /**
+     * the current treshold for a stream to be considered not silent
+     * */
     get treshold(){
         return this.treshold;
     }
 
+    /**
+     * @readonly
+     * current stats by each registered stream
+     * */
     get out(){
-        return this._out;
+        return Object.assign({}, this._out);
     }
 
+    /**
+     * @readonly
+     * if all registered streams are silent
+     * */
     get silence(){
         return this._silence;
     }
@@ -65,6 +81,11 @@ class SpeechDetection{
         return this._out[id];
     }
 
+    /**
+     * add a stream to the current detection process
+     * @param stream [MediaStream] a media stream to add (not checked, if it contains audio tracks at the current time or not)
+     * @param id an id to reference the stream and its results
+     * */
     addStream(stream, id){
         const analyzer = this._context.createAnalyser();
         analyzer.fftSize = 512;
@@ -100,13 +121,13 @@ class SpeechDetection{
             output.consecutiveSamplesOverTreshold++;
             if(output.consecutiveSamplesOverTreshold > this.requiredSamplesForSpeech){
                 output.speaking = true;
-                this._onSpeechStartByUser(id);
+                this._onSpeechStartByStream(id);
             }
         }else{
             output.consecutiveSamplesOverTreshold = 0;
             if(output.speaking){
                 output.speaking = false;
-                this._onSpeechEndByUser(id);
+                this._onSpeechEndByStream(id);
             }
         }
     }
@@ -115,26 +136,48 @@ class SpeechDetection{
         if(typeof cb !== "function") throw new Error('Callback must be a function');
     }
 
-    onSpeechStartByUser(cb){
+    /**
+     * callback triggers when any stream switches from silent to speaking,
+     * the id of the stream is given to the callback function
+     * @param cb [function]
+     * */
+    onSpeechStartByStream(cb){
         SpeechDetection._checkCb(cb);
-        this._onSpeechStartByUser = cb;
+        this._onSpeechStartByStream = cb;
     }
 
-    onSpeechEndByUser(cb){
+    /**
+     * callback triggers when any stream switches from speaking to silent,
+     * the id of the stream is given to the callback function
+     * @param cb [function]
+     * */
+    onSpeechEndByStream(cb){
         SpeechDetection._checkCb(cb);
-        this._onSpeechEndByUser = cb;
+        this._onSpeechEndByStream = cb;
     }
 
+    /**
+     * callback triggers, when no one was speaking and now one stream went from silence to speaking.
+     * The callback receives a list of ids of streams which are not silent any more
+     * @param cb [function]
+     * */
     onSpeechStart(cb){
         SpeechDetection._checkCb(cb);
         this._onSpeechStart = cb;
     }
 
+    /**
+     * callback triggers, when the last not silent stream goes silent
+     * @param cb [function]
+     * */
     onSpeechEnd(cb){
         SpeechDetection._checkCb(cb);
         this._onSpeechEnd = cb;
     }
 
+    /**
+     * callback triggers, as soon as another stream goes from silent to speaking or vice versa
+     * */
     onSpeakerChange(cb){
         SpeechDetection._checkCb(cb);
         this._onSpeakerChange = cb;
