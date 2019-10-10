@@ -7,9 +7,13 @@ class MediaServerModule{
         MediaServerModule._debug = bool;
     }
 
+    static get debug(){
+        return !!MediaServerModule._debug;
+    }
+
     static _getPuppet(){
         if(!MediaServerModule._browser){
-            return puppeteer.launch({headless: MediaServerModule._debug || false}).then(browser => {
+            return puppeteer.launch({headless: !MediaServerModule.debug}).then(browser => {
                 MediaServerModule._browser = browser;
                 return browser;
             });

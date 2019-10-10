@@ -1,6 +1,6 @@
 const Server = require('../../MediaServerUtilities/MediaServerModule.js');
-// for this example, set the server to debug
-Server.debug = true;
+// for this example, you can probably set the server to debug mode
+// Server.debug = true;
 
 const LobbyState = Object.freeze({
     SEARCHING: 'searching',
