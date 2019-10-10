@@ -1,4 +1,4 @@
-class SFUTranscriber {
+class Transcriber {
 
     /**
      * Create a transcriber for a given track who allows you to set up the peer connection with the given quality transcription
@@ -47,8 +47,16 @@ class SFUTranscriber {
 
     _mergeRtpSettingsForTrack(rtpOptions){
         const trackSettingsCopy = Object.assign({}, this._trackSettings);
-        const mustNotOverrideGivenSettings = this._trackSettings.sendEncodings || {}; // defined outside, must stay the same
-        trackSettingsCopy.sendEncodings = Object.assign({}, rtpOptions, mustNotOverrideGivenSettings);
+        if(!trackSettingsCopy.sendEncodings){
+            trackSettingsCopy.sendEncodings = [rtpOptions];
+        }else{
+            trackSettingsCopy.sendEncodings.forEach(encoding => {
+                Object.keys(rtpOptions).forEach(key => {
+                    console.log(key, key in encoding);
+                    if (!(key in encoding)) encoding[key] = rtpOptions[key];
+                });
+            });
+        }
         return trackSettingsCopy;
     }
 
@@ -61,7 +69,7 @@ class SFUTranscriber {
     transcribe(quality){
         quality = quality.toLowerCase();
         if(Object.keys(this._qualities).indexOf(quality) === -1) throw new Error('Unsupported quality option');
-        return [this._trackOrKind, this._mergeRtpSettingsForTrack(this._qualities[quality])];
+        return [this._trackOrKind, this._mergeRtpSettingsForTrack(this._qualities[quality][this._kind])];
     }
 
 }

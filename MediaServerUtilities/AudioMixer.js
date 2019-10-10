@@ -1,4 +1,4 @@
-class MCUAudioMixer{
+class AudioMixer{
 
     constructor(){
         this._context = new AudioContext();

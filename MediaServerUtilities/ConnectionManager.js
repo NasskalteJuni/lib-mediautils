@@ -1,4 +1,4 @@
-class MCUConnectionManager{
+class ConnectionManager{
 
     /**
      * create a new peer connection manager who handles everything related to transmitting media via RTCPeerConnections
@@ -41,8 +41,8 @@ class MCUConnectionManager{
      * @return list all video tracks
      * */
     getAllVideoTracks(userId=null){
-        const tracks = this.userId === null ? Object.values(this.peerConnections).reduce((tracks, c) => tracks.concat(c.getVideoTracks()),[]) : this.getPeerConnection(userId).getVideoTracks();
-        return tracks.filter(t => t.active);
+        const getVideoTracks = pc => pc.getTransceivers().filter(t => t.active && t.track.kind === "audio" && (t.direction === "sendrecv" || t.direction === "recvonly"));
+        return this.userId === null ? Object.values(this.peerConnections).reduce((tracks, c) => tracks.concat(getVideoTracks(c)),[]) : getVideoTracks(this.getPeerConnection(userId).getTransceivers());
     }
 
     /**
@@ -51,8 +51,8 @@ class MCUConnectionManager{
      * @return list all audio tracks
      * */
     getAllAudioTracks(userId=null){
-        const tracks = this.userId === null ? Object.values(this.peerConnections).reduce((tracks, c) => tracks.concat(c.getAudioTracks()),[]) : this.getPeerConnection(userId).getAudioTracks();
-        return tracks.filter(t => t.active);
+        const getAudioTracks = pc => pc.getTransceivers().filter(t => t.active && t.track.kind === "audio" && (t.direction === "sendrecv" || t.direction === "recvonly"));
+        return this.userId === null ? Object.values(this.peerConnections).reduce((tracks, c) => tracks.concat(c.getAudioTracks()),[]) : this.getPeerConnection(userId).getAudioTracks();
     }
 
     /**

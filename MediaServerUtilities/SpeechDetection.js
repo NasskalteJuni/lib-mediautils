@@ -9,11 +9,12 @@ class SpeechDetection{
      * @param config.samplingInterval [number=100] milliseconds between samples. Higher sample rate equals earlier detection but also more cpu cost
      * @param config.smoothingConstant [number=0.1] smoothes input to avoid peaks, set values with caution
      * @param config.requiredSamplesForSpeech [number=5] on how many consecutive samples must be a dBFS value over treshold to be considered speech
+     * @param config.debug [boolean=false] logging on events if true
      * */
-    constructor({treshold=-70, samplingInterval=100, smoothingConstant = 0.1, requiredSamplesForSpeech = 5} = {}){
+    constructor({threshold=-70, samplingInterval=100, smoothingConstant=0.1, requiredSamplesForSpeech=5, debug=false} = {}){
         this._smoothingConstant = 0.1;
         this._samplingInterval = 100; //ms
-        this._treshold = -Math.abs(treshold);
+        this._treshold = -Math.abs(threshold);
         this.requiredSamplesForSpeech = 3;
         this._in = {};
         this._out = {};
@@ -25,6 +26,7 @@ class SpeechDetection{
         this._onSpeakerChange = () => {};
         this._lastSpeakers = [];
         this._silence = true;
+        this._debug = debug;
         this._analyzerLoop = setInterval(() => {
             Object.keys(this._in).forEach(this._processForEachUser.bind(this));
             const currentSpeakers = Object.keys(this._out).reduce((speakers, id) => this._getStatsFor(id).speaking ? speakers.concat(id) : speakers, []).sort();
@@ -34,14 +36,19 @@ class SpeechDetection{
             const speechEnd = currentLength === 0 && lastLength > 0;
             const speechStart = currentLength > 0 && lastLength === 0;
             if(speechStart){
+                if(this._debug) console.log('speech start');
                 this._onSpeechStart(currentSpeakers);
                 this._silence = false;
             }
             if(speechEnd){
+                if(this._debug) console.log('speech end');
                 this._onSpeechEnd(currentSpeakers);
                 this._silence = true;
             }
-            if(change) this._onSpeakerChange(currentSpeakers, this._lastSpeakers.slice());
+            if(change){
+                if(this._debug) console.log('speakers changed', currentSpeakers, this._lastSpeakers);
+                this._onSpeakerChange(currentSpeakers, this._lastSpeakers.slice());
+            }
             this._lastSpeakers = currentSpeakers;
         }, this._samplingInterval);
     }
@@ -93,7 +100,7 @@ class SpeechDetection{
         const fftBins = new Float32Array(analyzer.frequencyBinCount);
         const source = this._context.createMediaStreamSource(stream);
         source.connect(analyzer);
-        this._in[id] = {analyzer, fftBins};
+        this._in[id] = {analyzer, fftBins, source, stream};
     }
 
     _analyzeVolume(analyzer, fftBins){

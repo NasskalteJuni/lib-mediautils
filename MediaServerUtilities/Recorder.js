@@ -1,4 +1,4 @@
-class MCURecorder{
+class Recorder{
 
     constructor(stream, {audioOnly = false, startImmediately = true, fileExtension = null} = {}){
         this._fileExtension = fileExtension;

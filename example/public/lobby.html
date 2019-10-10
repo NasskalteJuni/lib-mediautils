@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <title>Lobby</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/webrtc-adapter/7.3.0/adapter.min.js"></script>
-    <script src="./handle.js"></script>
-    <script src="./sendForm.js"></script>
-    <script src="./Call.js"></script>
+    <script src="handle.js"></script>
+    <script src="sendForm.js"></script>
+    <script src="Call.js"></script>
 </head>
 <body>
     <header>
@@ -20,9 +20,11 @@
             </ul>
             <form name="send" method="POST">
                 <input type="text" placeholder="..." name="message">
-                <button type="submit">Senden</button>
+                <button type="submit">Send</button>
             </form>
             <video id="v"></video>
+            <button id="media">Join Call</button>
+            <button id="close" disabled>Leave Call</button>
         </div>
         <div id="list">
 
@@ -54,7 +56,19 @@
                     track.addEventListener('ended', videoInput.removeTrack(track));
                     videoInput.addTrack(track);
                 });
-                window.unlockMedia = async () =>  window.call.addMedia(await navigator.mediaDevices.getUserMedia({video: true, audio: true}));
+                const unlockMedia = document.getElementById('media');
+                const closeMedia = document.getElementById('close');
+                unlockMedia.addEventListener('click', async () =>  {
+                    const ownStream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+                    window.call.addMedia(ownStream);
+                    closeMedia.disabled = false;
+                    unlockMedia.disabled = true;
+                });
+                closeMedia.addEventListener('click', () => {
+                    window.call.destroy();
+                    unlockMedia.diabled = false;
+                    closeMedia.disabled = true;
+                });
             }else{
                 document.getElementById('lobby').style.display = 'none';
                 fetch('/lobbies/').then(handle).then(response => response.json()).then(lobbies => '<ul>'+lobbies.map(lobby => `<li><a href="/lobby.html?id=${lobby.id}">${lobby.name}</a></li>`).join('\n')+'</ul>').then(html => document.getElementById('list').innerHTML = html).catch(console.error);

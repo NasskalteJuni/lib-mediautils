@@ -1,16 +1,20 @@
 const puppeteer = require('puppeteer');
 const read = require('fs').readFileSync;
 
-class MCUServerModule{
+class MediaServerModule{
+
+    static set debug(bool){
+        MediaServerModule._debug = bool;
+    }
 
     static _getPuppet(){
-        if(!MCUServerModule._browser){
-            return puppeteer.launch({headless: false}).then(browser => {
-                MCUServerModule._browser = browser;
+        if(!MediaServerModule._browser){
+            return puppeteer.launch({headless: MediaServerModule._debug || false}).then(browser => {
+                MediaServerModule._browser = browser;
                 return browser;
             });
         }
-        return Promise.resolve(MCUServerModule._browser);
+        return Promise.resolve(MediaServerModule._browser);
     }
 
     constructor(id, config = {}){
@@ -18,19 +22,24 @@ class MCUServerModule{
         this._isInitialized = false;
         this._onInitializedCb = config["onInitialized"] ? config["onInitialized"] : () => {};
         this._fps = config["fps"] || 30;
+        this._pageTemplate = config["template"] || null;
+        this._customScripts = config["scripts"] || null;
+        this._debug = config["debug"] || false;
     }
 
     async init(){
         try{
             if(this._isInitialized) throw new Error('ALREADY INITIALIZED');
-            this._instance = await (await MCUServerModule._getPuppet()).newPage();
-            await this._instance.addScriptTag({path: require.resolve('./MCUConnectionManager')});
+            this._instance = await (await MediaServerModule._getPuppet()).newPage();
+            await this._instance.addScriptTag({path: require.resolve('./ConnectionManager')});
             await this._instance.evaluate(fps => window["fps"] = fps, this._fps);
-            await this._instance.addScriptTag({path: require.resolve('./MCUVideoMixer.js')});
-            await this._instance.addScriptTag({path: require.resolve('./MCUAudioMixer.js')});
-            await this._instance.addScriptTag({path: require.resolve('./MCURecorder.js')});
+            await this._instance.addScriptTag({path: require.resolve('./VideoMixer')});
+            await this._instance.addScriptTag({path: require.resolve('./AudioMixer.js')});
+            await this._instance.addScriptTag({path: require.resolve('./Recorder')});
             await this._instance.addScriptTag({path: require.resolve('./SpeechDetection.js')});
-            await this._instance.setContent(read(require.resolve('./template.html'),'utf-8'));
+            await this._instance.addScriptTag({path: require.resolve('./Transcriber.js')});
+            if(this._pageTemplate) await this._instance.setContent(read(this._pageTemplate,'utf-8'));
+            if(this._customScripts) this._customScripts.forEach(async path => await this._instance.addScriptTag({path}));
             await this._instance.evaluate(title => document.title = title, this._id);
             this._isInitialized=true;
             this._onInitializedCb();
@@ -99,4 +108,4 @@ class MCUServerModule{
     }
 }
 
-module.exports = MCUServerModule;
+module.exports = MediaServerModule;

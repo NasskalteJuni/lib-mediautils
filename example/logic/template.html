@@ -6,13 +6,16 @@
 </head>
 <body>
     <script>
-        window.connections = new MCUConnectionManager();
-        window.videoMixer = new MCUVideoMixer({canvas: '#canvas', fps, width: 640, height: 480});
+        window.connections = new ConnectionManager();
+        window.videoMixer = new VideoMixer({fps});
+        window.speechDetection = new SpeechDetection();
+        speechDetection.onSpeakerChange(speakers => console.log(speakers.join[', '],' are currently speaking'));
         document.body.appendChild(videoMixer._canvas);
-        window.audioMixer = new MCUAudioMixer();
+        window.audioMixer = new AudioMixer();
+        window.recorder = new Recorder(new MediaStream([videoMixer.outputTrack, audioMixer.outputTrack]));
         connections.onNewPeerConnection(function(userId, peerConnection){
-            peerConnection.addTransceiver(videoMixer.outputTrack, {direction: 'sendonly', streams: [videoMixer.out]});
-            peerConnection.addTransceiver(audioMixer.outputTrack, {direction: 'sendonly', streams: [audioMixer.out]});
+            peerConnection.addTransceiver(...new Transcriber(videoMixer.outputTrack, {direction: 'sendonly', streams: [videoMixer.out]}).transcribe('medium'));
+            peerConnection.addTransceiver(...new Transcriber(audioMixer.outputTrack, {direction: 'sendonly', streams: [audioMixer.out]}).transcribe('medium'));
         });
         connections.onTrackHandle(function(userId, track, streams){
             if(track.kind === "video"){
@@ -22,6 +25,7 @@
             if(track.kind === "audio"){
                 const stream = streams && streams.length ? streams[0] : new MediaStream([track]);
                 audioMixer.addStream(stream, userId);
+                speechDetection.addStream(stream, userId);
             }
         });
         connections.onDisconnect(function(userId){

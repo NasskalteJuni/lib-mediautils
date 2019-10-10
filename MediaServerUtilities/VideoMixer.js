@@ -1,4 +1,4 @@
-class MCUVideoMixer{
+class VideoMixer{
 
     /**
      * create a new video mixer

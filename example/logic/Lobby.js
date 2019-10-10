@@ -1,4 +1,6 @@
-const Server = require('../mediaUtilities/MCUServerModule.js');
+const Server = require('../../MediaServerUtilities/MediaServerModule.js');
+// for this example, set the server to debug
+Server.debug = true;
 
 const LobbyState = Object.freeze({
     SEARCHING: 'searching',
@@ -24,7 +26,7 @@ class Lobby{
         this._password = password || '';
         this._maxPlayers = maxPlayers || 5;
         this._id = Math.random().toString(32).substr(2,7) + Math.random().toString(32).substr(2,7);
-        this._server = new Server(this._id);
+        this._server = new Server(this._id, {template: require.resolve('./template.html')}); // use a page template, alternatively, pass one or multiple scripts with scripts[paths...]
         this._server.init();
         lobbies.push(this);
     }
