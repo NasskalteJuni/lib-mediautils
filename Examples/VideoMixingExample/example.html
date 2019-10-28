@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Mixing</title>
+    <script src="../../dist/bundle.min.js"></script>
+    <script src="./mixingConfigs.js"></script>
+    <script src="./srcToEndlessStream.js"></script>
+    <style>
+        #display, #canvas{
+            width: 640px;
+            height: 480px;
+        }
+    </style>
+</head>
+<body>
+<video id="display" autoplay></video>
+<script>
+    const display = document.getElementById("display");
+    const fps = 15;
+    // create a new video mixer and pass desired options
+    const mixer = new MediaUtilities.VideoMixer({fps, width: 640, height: 480});
+    // add the created configurations (see mixingConfigs.js). this can be done at any time
+    // mixer.addConfig(grid, 'grid');
+    // mixer.addConfig(sideBySide, 'sideBySide');
+    // mixer.addConfig(oneInTheMiddle, 'oneInTheMiddle');
+    mixer.addConfig(currentSpeakerOnly, 'currentSpeakerOnly');
+    const getWebcam = navigator.mediaDevices.getUserMedia({video: true});
+    getWebcam.then(stream => {
+        for(let i=0; i <7; i++) mixer.addStream(stream, 'webcam'+i);
+        display.srcObject = mixer.out;
+    });
+    window['currentSpeaker'] = 'webcam2';
+    window['speaking'] = true;
+</script>
+</body>
+</html>

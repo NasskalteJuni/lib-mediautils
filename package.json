@@ -4,11 +4,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "run": "node server.js",
+    "build": "rollup -c --config",
+    "dev": "rollup -c -w --config",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "license": "ISC",
   "dependencies": {
     "puppeteer": "^1.20.0"
+  },
+  "devDependencies": {
+    "rollup": "^1.25.2",
+    "rollup-plugin-commonjs": "^10.1.0",
+    "rollup-plugin-node-resolve": "^5.2.0"
   }
 }

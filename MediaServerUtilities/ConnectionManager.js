@@ -186,3 +186,5 @@ class ConnectionManager{
         }
     }
 }
+
+module.exports = ConnectionManager;

@@ -73,3 +73,5 @@ class Transcriber {
     }
 
 }
+
+module.exports = Transcriber;

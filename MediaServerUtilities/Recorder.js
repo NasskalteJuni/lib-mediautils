@@ -31,3 +31,5 @@ class Recorder{
     }
 
 }
+
+module.exports = Recorder;

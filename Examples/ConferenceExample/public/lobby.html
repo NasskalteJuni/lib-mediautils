@@ -51,7 +51,7 @@
                 window.call = new Call(es);
                 const video = document.getElementById('video');
                 const videoInput = new MediaStream([]);
-                video.srcObject = videoInput;
+                canvas.srcObject = videoInput;
                 call.onTrack(track => {
                     track.addEventListener('ended', videoInput.removeTrack(track));
                     videoInput.addTrack(track);

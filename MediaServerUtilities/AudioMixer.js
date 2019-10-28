@@ -35,3 +35,5 @@ class AudioMixer{
     }
 
 }
+
+module.exports = AudioMixer;

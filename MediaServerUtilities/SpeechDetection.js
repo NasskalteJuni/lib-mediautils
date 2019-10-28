@@ -190,3 +190,5 @@ class SpeechDetection{
         this._onSpeakerChange = cb;
     }
 }
+
+module.exports = SpeechDetection;
