@@ -1,4 +1,4 @@
-const Server = require('../../MediaServerUtilities/MediaServerModule.js');
+const Server = require('../../../MediaServerUtilities/MediaServerModule.js');
 // for this example, you can probably set the server to debug mode
 // Server.debug = true;
 

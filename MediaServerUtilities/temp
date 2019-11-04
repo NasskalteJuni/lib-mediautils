@@ -1,0 +1,5 @@
+VideoMixer
+ - has configs
+ - has streams
+ - has current config depending on streams and configs
+ - has paint loop which uses the positions of the current config

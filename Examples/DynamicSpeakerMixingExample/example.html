@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Mixing</title>
+    <!-- point this to the script, if the project was cloned from git, it should work already -->
+    <script src="../../dist/bundle.min.js"></script>
+    <style>
+        #container{
+            position: relative;
+            width: 640px;
+            height: 480px;
+        }
+        #display{
+            width: 100%;
+            height: 100%;
+        }
+        #start{
+            position: absolute;
+            width: 100%;
+            height: 2em;
+            top: calc(50% - 1em);
+            left: 0;
+        }
+        #start[disabled]{
+            visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <video id="display" autoplay></video>
+    <button id="start"> start example with local webcam </button>
+</div>
+<script>
+    const startButton = document.getElementById("start");
+    startButton.addEventListener("click", function onClick(){
+        startButton.disabled = true;
+        // important parts start now:
+        const display = document.getElementById("display");
+        const fps = 15;
+        // create a speechDetection (bind to window for easier inspection)
+        window.speechDetection = new MediaUtilities.SpeechDetection();
+        const idIsNowSpeaking = id => speechDetection.speakers.indexOf(id) >= 0 || speechDetection.speakers.length === 0;
+        // make a config, were the current speaker (or last speaker) is shown
+        // and which shows him bigger, when he is currently speaking
+        const currentSpeakerOnly = new MediaUtilities.VideoMixingConfiguration({
+            priority: 0,
+            applicable: true,
+            positions: {
+                x: s => speechDetection.silence ? 10 : 0,
+                y: s => speechDetection.silence ? 10 : 0,
+                width: s=> idIsNowSpeaking(s.id) ? (speechDetection.silence ? s.width - 20 : s.width) : 0,
+                height: s => idIsNowSpeaking(s.id) ? (speechDetection.silence ? s.height - 20 : s.height) : 0
+            }
+        });
+        // create a new video mixer (global for easier inspection) and pass desired options
+        window.mixer = new MediaUtilities.VideoMixer({fps, width: 640, height: 480});
+        // add the created configuration
+        mixer.addConfig(currentSpeakerOnly, 'currentSpeakerOnly');
+        // add the streams to use. for this test, just use the webcam
+        const getWebcam = navigator.mediaDevices.getUserMedia({video: true, audio: true});
+        getWebcam.then(stream => {
+            id = 'webcam';
+            mixer.addStream(stream, id);
+            speechDetection.addStream(stream, id);
+            display.srcObject = mixer.out;
+        });
+        // done
+    });
+</script>
+</body>
+</html>

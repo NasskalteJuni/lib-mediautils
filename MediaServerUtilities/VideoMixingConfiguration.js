@@ -57,8 +57,8 @@ class VideoMixingConfiguration {
             // case: array -> return the array element at given index
             return this._positions[index];
         }else{
-            // case: single object -> return the single object for every stream
-            return this._positions;
+            // case: single object -> return a clone of the single object for every stream
+            return Object.assign({}, this._positions);
         }
     }
 }

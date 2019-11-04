@@ -83,6 +83,14 @@ class SpeechDetection{
         return this._silence;
     }
 
+    /**
+     * @readonly
+     * a list of the latest speakers (empty when no one spoke since the last sample)
+     * */
+    get speakers(){
+        return this._lastSpeakers
+    }
+
     _getStatsFor(id){
         if(!this._out[id]) this._out[id] = {consecutiveSamplesOverTreshold: 0, speaking: false, current: null};
         return this._out[id];
