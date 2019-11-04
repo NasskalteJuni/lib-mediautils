@@ -64,7 +64,7 @@ class VideoMixer extends Videos(Configurations()){
                     if(!ids.length) throw new Error('more position definitions than streams');
                     id = ids[0];
                     pos.source = this.videoByStreamId(id);
-                    pos.assignedId = id; //TODO check if no side effects occur
+                    pos.assignedId = id;
                 }
                 ids.shift();
             });
