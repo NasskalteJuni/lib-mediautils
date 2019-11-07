@@ -1,6 +1,6 @@
+/* var router =  */
 const router = require('express').Router();
 const Lobby = require('../logic/Lobby.js');
-const User = require('../persistence/User.js');
 const asyncMiddleware = require('./asyncMiddleware.js');
 
 router.use((req, res, next) => {
@@ -47,7 +47,7 @@ router.post('/lobby/', asyncMiddleware((req, res) => {
     };
 }));
 
-router.post('/lobby/:id/users/',asyncMiddleware(async (req, res) => {
+router.post('/lobby/:id/users/', asyncMiddleware(async (req, res) => {
     const lobby = Lobby.byId(req.params.id);
     if(!lobby) return res.status(404).sendStatusMessage('NO SUCH LOBBY');
     if(!lobby.joinable) return res.status(401).sendStatusMessage('LOBBY IS FULL');
