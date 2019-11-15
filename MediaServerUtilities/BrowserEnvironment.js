@@ -14,7 +14,8 @@ class BrowserEnvironment {
 
     static _getPuppet() {
         if (!BrowserEnvironment._browser) {
-            return puppeteer.launch({headless: !BrowserEnvironment.debug}).then(browser => {
+            const isDebug = BrowserEnvironment.debug;
+            return puppeteer.launch({headless: !isDebug, devtools: isDebug}).then(browser => {
                 BrowserEnvironment._browser = browser;
                 return browser;
             });

@@ -11,6 +11,7 @@ class _Tunnel{
     constructor(browserEnvironment){
         this._instance = browserEnvironment._instance;
         this._exportHandlers = {};
+        this._anyExportHandler = () => {};
         this._state = "closed";
     }
 
@@ -21,15 +22,27 @@ class _Tunnel{
         if(this._state === "open") throw new Error("Tunnel is already open");
         this._state = "open";
         await this._instance.exposeFunction("Tunnel._handleExport", (type, serialized) => {
-            if(this._exportHandlers[type]) this._exportHandlers[type](JSON.parse(serialized));
+            const serializable = JSON.parse(serialized);
+            if(this._exportHandlers[type]) this._exportHandlers[type](serializable);
+            this._anyExportHandler(serializable, type);
         });
         // expose _Tunnel into the browser context
         await this._instance.evaluate(() => {
             window["Tunnel"] = {
                 _importHandlers: {},
-                _handleImport: function(type, serialized){ if(window["Tunnel"]._importHandlers[type]) window["Tunnel"]._importHandlers[type](JSON.parse(serialized))},
-                onImport: function(type, cb){ window["Tunnel"]._importHandlers[type] = cb},
-                doExport: function(type, serializable){ window["Tunnel._handleExport"](type, JSON.stringify(serializable))}
+                _anyImportHandler: () => {},
+                _handleImport: function(type, serialized){
+                    const serializable = JSON.parse(serialized);
+                    window["Tunnel"]._anyImportHandler(serializable);
+                    if(window["Tunnel"]._importHandlers[type]) window["Tunnel"]._importHandlers[type](serializable)
+                },
+                onImport: function(type, cb){
+                    if(arguments.length === 1) this._anyImportHandler = arguments[0];
+                    else window["Tunnel"]._importHandlers[type] = cb
+                },
+                doExport: function(type, serializable){
+                    window["Tunnel._handleExport"](type, JSON.stringify(serializable))
+                }
             };
         })
     }
@@ -46,11 +59,12 @@ class _Tunnel{
 
     /**
      * register a callback function to react to something being exported from the browser environment
-     * @param type [string] what kind will be exported
+     * @param type [string*] what kind will be exported
      * @param cb [function] a handler that will receive the exported serializable
      * */
     onExport(type, cb){
-        this._exportHandlers[type] = cb;
+        if(arguments.length === 1) this._anyExportHandler = arguments[0];
+        else this._exportHandlers[type] = cb;
     }
 
 }

@@ -18,6 +18,7 @@ module.exports = (superclass=Object) => class C extends superclass{
     addStream(stream, id){
         const helper = document.createElement('video');
         helper.autoplay = true;
+        helper.muted = true;
         helper.loop = true;
         helper.srcObject = stream;
         helper.onload = () => helper.play();

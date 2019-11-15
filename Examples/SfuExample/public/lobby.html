@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFU Example</title>
+    <script src="./bundle.min.js"></script>
+    <script src="Call.js"></script>
+</head>
+<body>
+    <video id="video" autoplay></video>
+    <script>
+        const params = new URLSearchParams(location.search);
+        (async () => {
+            const signaller = new EventSource('/updates?user='+params.get('user_id'));
+            signaller.send = msg => {
+                msg.user = params.get('user_id');
+                return fetch('/message/', {method: 'POST', headers: {"Content-Type":"application/json"}, body: JSON.stringify(msg)});
+            };
+            const video = document.getElementById('video');
+            const videoMixer = new MediaUtilities.VideoMixer();
+            window.videoMixer = videoMixer;
+            const audioMixer = new MediaUtilities.AudioMixer();
+            const grid = new MediaUtilities.VideoMixingConfigurations.Grid(1);
+            const line = new MediaUtilities.VideoMixingConfigurations.Line(0, true);
+            const self = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+            videoMixer.addConfig(line, 'line');
+            videoMixer.addConfig(grid, 'grid');
+            videoMixer.addStream(self, 'self');
+            const call = new Call(signaller);
+            window.call = call;
+            video.srcObject = new MediaStream([videoMixer.outputTrack, audioMixer.outputTrack]);
+
+            call.onTrack((track, streams) => {
+                console.log('received track', track, streams);
+                const stream = streams.length > 0 ? streams[0] : new MediaStream([track]);
+                if(track.kind === "video") videoMixer.addStream(stream, "video-"+stream.label);
+                if(track.kind === "audio") audioMixer.addStream(stream, "audio-"+stream.label);
+            });
+            await call.addMedia(self);
+            await call.start();
+
+            window.addEventListener('beforeunload', async () => {
+                await fetch('/leave', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({id: params.get('user_id')})
+                })
+            });
+        })();
+    </script>
+</body>
+</html>

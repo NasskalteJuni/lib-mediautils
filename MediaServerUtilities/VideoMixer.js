@@ -152,6 +152,7 @@ class VideoMixer extends Videos(Configurations()){
      * draw the current streams on according to the current config in use on a canvas
      * */
     _draw(){
+        if(!this.currentConfig) return;
         const ids = this.streamIds();
         if(this.currentConfig.paint){
             // let the custom paint function handle it

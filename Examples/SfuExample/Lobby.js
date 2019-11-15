@@ -1,4 +1,4 @@
-const BrowserEnvironment = require('../../../MediaServerUtilities/BrowserEnvironment.js');
+const BrowserEnvironment = require('../../MediaServerUtilities/BrowserEnvironment.js');
 BrowserEnvironment.debug = true;
 const ID = require('./ID.js');
 const lobbies = [];
@@ -46,7 +46,7 @@ class Lobby{
         this._id = id;
         this._maxEmptyMinutes = maxEmptyMinutes;
         this._closingTimer = null;
-        this._env = new BrowserEnvironment(this._id, {template: require.resolve('../browser_environment/template.html')}); // use a page template, alternatively, pass one or multiple scripts with scripts[paths...]
+        this._env = new BrowserEnvironment(this._id, {scripts: [require.resolve('./sfu.js')]}); // use a page template, alternatively, pass one or multiple scripts with scripts[paths...]
         this._env.init();
         lobbies.push(this);
     }

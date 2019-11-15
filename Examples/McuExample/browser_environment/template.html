@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>initializing...</title>
+</head>
+<body>
+    <script>
+        /* global MediaUtilities */
+        window.connections = new MediaUtilities.ConnectionManager();
+        window.videoMixer = new MediaUtilities.VideoMixer();
+        window.audioMixers = {};
+        connections.onNewPeerConnection(function(userId, peerConnection){
+            window.audioMixers[userId] = new MediaUtilities.AudioMixer();
+            peerConnection.addTransceiver(videoMixer.outputTrack, {direction: 'sendonly', streams: [videoMixer.out]});
+            peerConnection.addTransceiver(audioMixers[userId].outputTrack, {direction: 'sendonly', streams: [audioMixer.out]});
+        });
+        connections.onTrackHandle(function(userId, track, streams){
+            if(track.kind === "video"){
+                const stream = streams && streams.length ? streams[0] : new MediaStream([track]);
+                videoMixer.addStream(stream, userId);
+            }
+            if(track.kind === "audio"){
+                const stream = streams && streams.length ? streams[0] : new MediaStream([track]);
+                audioMixers[userId].addStream(stream, userId);
+            }
+        });
+        connections.onDisconnect(function(userId){
+            videoMixer.removeStream(userId);
+        });
+        Tunnel.onImport(user, async ({type, data}) => {
+            switch (type) {
+                case "ice":
+                    await connections.addIceCandidate(user, data);
+                    break;
+                case "offer":
+                    const answer = await connections.handleOffer(user, data);
+                    Tunnel.doExport(user, {type: 'answer', content: answer});
+                    break;
+                case "answer":
+                    await connections.handleAnswer(user, data);
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>

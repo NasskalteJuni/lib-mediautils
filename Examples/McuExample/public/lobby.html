@@ -38,7 +38,7 @@
                 document.getElementById('list').style.display = 'none';
                 await fetch('/lobby/'+lobbyId+'/users', {method: 'POST'});
                 const es = new EventSource('/lobby/'+lobbyId+'/updates');
-                es.send = msg => fetch('/lobby/'+lobbyId+'/server',{method: 'POST', body: JSON.stringify(msg), headers: {"Accept":"application/json","Content-Type":"application/json"}});
+                es.send = msg => fetch('/lobby/'+lobbyId+'/message',{method: 'POST', body: JSON.stringify(msg), headers: {"Accept":"application/json","Content-Type":"application/json"}});
                 es.addEventListener('message', e => document.getElementById('messages').innerText += e.data);
                 es.addEventListener('open', () => console.log('opened event stream'));
                 es.addEventListener('error', e => console.error(e));
