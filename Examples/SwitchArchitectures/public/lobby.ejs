@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%=title%></title>
+    <link href="style.css" rel="stylesheet" type="text/css">
+    <script src="bundle.min.js"></script>
+</head>
+<body>
+<aside id="users">
+</aside>
+<main>
+    <video id="display" autoplay></video>
+    <button id="addMedia">Join Conference</button>
+</main>
+<script>
+    function updateUserList(users){
+        const container = document.getElementById("users");
+        container.innerHTML = "";
+        const ul = document.createElement("ul");
+        users.forEach(u => {
+            const li = document.createElement("li");
+            li.innerText = u;
+            ul.appendChild(li);
+        })
+        container.appendChild(ul);
+    }
+</script>
+<script>
+    const self = new URLSearchParams(location.search).get("user");
+    const connections = new MediaUtilities.ConnectionManager({name: self, verbose: true});
+    const videoMixer = new MediaUtilities.VideoMixer();
+    videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Line(0, true), 'line');
+    videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Grid(1, ids => [4,6,9].indexOf(ids.length)), 'grid');
+    const audioMixer = new MediaUtilities.AudioMixer();
+    const mixed = new MediaStream([videoMixer.outputTrack, audioMixer.outputTrack]);
+    document.getElementById('display').srcObject = mixed;
+    connections.addEventListener('userconnected', () => updateUserList(connections.users))
+    connections.addEventListener('userdisconnected', () => updateUserList(connections.users));
+    connections.addEventListener('streamadded', (stream, peer) => {
+        console.log('add stream',stream,'of peer',peer,'to mixing process');
+        videoMixer.addStream(stream, peer+'-'+stream.id);
+        audioMixer.addStream(stream, peer+'-'+stream.id);
+    })
+    connections.addEventListener('streamremoved', (stream, peer) => {
+        console.log('remove stream',stream,'of peer',peer,'from mixing process');
+        videoMixer.removeStream(peer+'-'+stream.id);
+        videoMixer.removeStream(peer+'-'+stream.id);
+    })
+    const addMediaButton = document.getElementById("addMedia");
+    addMediaButton.addEventListener("click", async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+        connections.addMedia(stream);
+        addMediaButton.parentNode.removeChild(addMediaButton);
+    });
+    window.addEventListener('beforeunload', () => connections.close());
+</script>
+</body>
+</html>
