@@ -28,8 +28,10 @@
     }
 </script>
 <script>
-    const self = new URLSearchParams(location.search).get("user");
-    const connections = new MediaUtilities.ConnectionManager({name: self, verbose: true});
+    const verbose = true;
+    const signaller = new WebSocket(location.origin.replace(/^http/,'ws'));
+    const connections = new MediaUtilities.ConnectionManager({verbose, signaller});
+    const mcu = new MediaUtilities.Connect({signaller, verbose, peer: '@mcu', isYielding: () => false});
     const videoMixer = new MediaUtilities.VideoMixer();
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Line(0, true), 'line');
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Grid(1, ids => [4,6,9].indexOf(ids.length)), 'grid');
@@ -46,13 +48,15 @@
     connections.addEventListener('streamremoved', (stream, peer) => {
         console.log('remove stream',stream,'of peer',peer,'from mixing process');
         videoMixer.removeStream(peer+'-'+stream.id);
-        videoMixer.removeStream(peer+'-'+stream.id);
+        audioMixer.removeStream(peer+'-'+stream.id);
     })
     const addMediaButton = document.getElementById("addMedia");
     addMediaButton.addEventListener("click", async () => {
         const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
         connections.addMedia(stream);
         addMediaButton.parentNode.removeChild(addMediaButton);
+        // yeah, we have to make an autoplay-video play. If not muted, autoplay isn't allowed in chrome
+        if(display.paused) display.play();
     });
     window.addEventListener('beforeunload', () => connections.close());
 </script>
