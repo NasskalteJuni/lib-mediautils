@@ -1,8 +1,9 @@
 const puppeteer = require('puppeteer');
 const read = require('fs').readFileSync;
 const Tunnel = require('./_Tunnel.js');
+const Listenable = require('./Listenable.js');
 
-class BrowserEnvironment {
+class BrowserEnvironment extends Listenable(){
 
     static set debug(bool) {
         BrowserEnvironment._debug = bool;
@@ -15,7 +16,9 @@ class BrowserEnvironment {
     static _getPuppet() {
         if (!BrowserEnvironment._browser) {
             const isDebug = BrowserEnvironment.debug;
-            return puppeteer.launch({headless: !isDebug, devtools: isDebug}).then(browser => {
+            const flags = ["--allow-insecure-localhost","--autoplay-policy=no-user-gesture-required","--no-user-gesture-required"];
+            if(isDebug) flags.push("--webrtc-event-logging");
+            return puppeteer.launch({headless: !isDebug, devtools: isDebug, args: flags}).then(browser => {
                 BrowserEnvironment._browser = browser;
                 return browser;
             });
@@ -24,6 +27,7 @@ class BrowserEnvironment {
     }
 
     constructor(id, config = {}) {
+        super();
         this._id = id;
         this._isInitialized = false;
         this._onInitializedCb = config["onInitialized"] ? config["onInitialized"] : () => {
@@ -63,8 +67,10 @@ class BrowserEnvironment {
             await this._instance.evaluate(title => document.title = title, this._id);
             this._isInitialized = true;
             this._onInitializedCb();
+            this.dispatchEvent('initialized');
         } catch (err) {
             this._errorHandler(err);
+            this.dispatchEvent('error');
         }
     }
 
@@ -79,6 +85,7 @@ class BrowserEnvironment {
     }
 
     async destroy() {
+        this.dispatchEvent('destroy');
         return this._instance.close();
     }
 

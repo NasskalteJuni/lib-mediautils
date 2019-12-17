@@ -26,12 +26,27 @@
         })
         container.appendChild(ul);
     }
+
+    function addSwitchButton(){
+        const button = document.createElement('button');
+        button.id = 'changearchitecture';
+        button.innerText = 'change architecture (currently '+architecture+')';
+        button.addEventListener('click', () => {
+            const switchToArchitecture = architecture === 'mesh' ? 'mcu' : 'mesh';
+            signaller.send(JSON.stringify({type: 'architecture:change', receiver: '@server', data: switchToArchitecture, sent: new Date().toISOString()}));
+            console.log('architecture changed to '+architecture);
+        });
+        document.querySelector('main').appendChild(button);
+    }
 </script>
 <script>
+    const name = new URLSearchParams(location.search).get('user');
+    let architecture = 'mesh';
+    let cam = null;
     const verbose = true;
     const signaller = new WebSocket(location.origin.replace(/^http/,'ws'));
-    const connections = new MediaUtilities.ConnectionManager({verbose, signaller});
-    const mcu = new MediaUtilities.Connect({signaller, verbose, peer: '@mcu', isYielding: () => false});
+    const connections = new MediaUtilities.ConnectionManager({name, verbose, signaller});
+    const mediaserver = new MediaUtilities.Connect({peer: '@mcu', verbose, signaller, isYielding: () => false});
     const videoMixer = new MediaUtilities.VideoMixer();
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Line(0, true), 'line');
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Grid(1, ids => [4,6,9].indexOf(ids.length)), 'grid');
@@ -50,13 +65,45 @@
         videoMixer.removeStream(peer+'-'+stream.id);
         audioMixer.removeStream(peer+'-'+stream.id);
     })
+    mediaserver.addEventListener('streamadded', (stream) => {
+        display.srcObject = stream;
+        if(display.paused) display.play();
+    });
+    signaller.addEventListener('message', e => {
+        const msg = JSON.parse(e.data);
+        if(msg.type === 'architecture:change'){
+            console.log('received architecture update:', msg.data);
+            // if we have for some reason the current architecture, do nothing
+            if(msg.data === architecture) return;
+            architecture = msg.data;
+            if(document.getElementById('changearchitecture')) document.getElementById('changearchitecture').innerText = 'change architecture (currently '+architecture+')';
+            // if we already use our webcam, switch the stream to the current architecture
+            if(cam){
+                if(architecture === 'mesh'){
+                    connections.addMedia(cam);
+                    mediaserver.removeMedia(cam);
+                }else if(architecture === 'mcu'){
+                    mediaserver.addMedia(cam);
+                    connections.removeMedia(cam);
+                }
+            }
+            // redirect the output. mesh is mixed locally, mediaserver remotely, add mixed stream to display
+            if(architecture === 'mesh'){
+                display.srcObject = mixed;
+            }else if(architecture === 'mcu'){
+                display.srcObject = mediaserver.streams[0];
+            }
+        }
+    })
     const addMediaButton = document.getElementById("addMedia");
     addMediaButton.addEventListener("click", async () => {
-        const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
-        connections.addMedia(stream);
+        cam = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+        if(architecture === 'mesh') connections.addMedia(cam);
+        else if(architecture === 'mcu') mediaserver.addMedia(cam);
         addMediaButton.parentNode.removeChild(addMediaButton);
         // yeah, we have to make an autoplay-video play. If not muted, autoplay isn't allowed in chrome
         if(display.paused) display.play();
+        addSwitchButton();
     });
     window.addEventListener('beforeunload', () => connections.close());
 </script>

@@ -6,15 +6,21 @@ class ConnectionManager extends Listenable(){
     /**
      * create a new peer connection manager who handles everything related to transmitting media via RTCPeerConnections
      * */
-    constructor({signaller = null, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false} = {}){
+    constructor({name = null, signaller = null, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = false} = {}){
         super();
         this._signaller = signaller || new WebSocket(location.origin.replace(/^http/,'ws'));
         this._verbose = verbose;
         this.connections = {};
         this.localMediaStreams = [];
-        const isYielding = other => name.localeCompare(other);
+        isYielding = isYielding || (name === null ? () => false : other => name.localeCompare(other));
         this._signaller.addEventListener('message', e => {
-            const msg = JSON.parse(e.data);
+            let msg;
+            try{
+                msg = JSON.parse(e.data);
+            }catch(err){
+                console.error('erroneous message', e.data, e);
+                throw err;
+            }
             switch(msg.type){
                 case "user:connected":
                     if(this._verbose) console.log('new user connected', msg.data);
@@ -96,10 +102,11 @@ class ConnectionManager extends Listenable(){
         if(arguments.length === 0){
             if(this._verbose) console.log('removed all media');
             this.localMediaStreams = [];
-            Object.values(this.connections).forEach(con => con.local)
+            Object.values(this.connections).forEach(con => con.removeMedia());
         }else{
             if(this._verbose) console.log('remove single media stream');
             this.localMediaStreams = this.localMediaStreams.filter(s => s.id !== arguments[0].id);
+            Object.values(this.connections).forEach(con => con.removeMedia(arguments[0]));
         }
     }
 
@@ -111,6 +118,7 @@ class ConnectionManager extends Listenable(){
     forEach(fn){
         Object.values(this.connections).forEach(fn);
     }
+
 }
 
 module.exports = ConnectionManager;

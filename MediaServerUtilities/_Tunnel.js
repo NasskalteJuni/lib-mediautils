@@ -34,14 +34,18 @@ class _Tunnel{
                 _handleImport: function(type, serialized){
                     const serializable = JSON.parse(serialized);
                     window["Tunnel"]._anyImportHandler(serializable);
-                    if(window["Tunnel"]._importHandlers[type]) window["Tunnel"]._importHandlers[type](serializable)
+                    if(window["Tunnel"]._importHandlers[type] instanceof Array) window["Tunnel"]._importHandlers[type].forEach(cb => cb(serializable));
                 },
                 onImport: function(type, cb){
-                    if(arguments.length === 1) this._anyImportHandler = arguments[0];
-                    else window["Tunnel"]._importHandlers[type] = cb
+                    if(arguments.length === 1){
+                        this._anyImportHandler = arguments[0];
+                    }else{
+                        if(!window["Tunnel"]._importHandlers[type]) window["Tunnel"]._importHandlers[type] = [];
+                        window["Tunnel"]._importHandlers[type].push(cb);
+                    }
                 },
                 doExport: function(type, serializable){
-                    window["Tunnel._handleExport"](type, JSON.stringify(serializable))
+                    window["Tunnel._handleExport"](type, JSON.stringify(serializable));
                 }
             };
         })

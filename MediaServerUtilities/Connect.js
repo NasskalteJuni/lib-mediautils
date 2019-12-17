@@ -20,6 +20,7 @@ class Connect extends Listenable() {
         this._setupPeerConnection();
         this._receivedStreams = [];
         this._receivedTracks = [];
+        this._addedTracks = [];
     }
 
     /**
@@ -103,6 +104,7 @@ class Connect extends Listenable() {
     async _initiateHandshakeWithOffer() {
         if (this._connection.signalingState !== "stable") return;
         const offer = await this._connection.createOffer();
+        if (this._connection.signalingState !== "stable") return;
         await this._connection.setLocalDescription(offer);
         if (this._verbose) console.log('created offer on connection ' + this._id + ':', offer);
         const msg = JSON.stringify({receiver: this._peer, data: offer, type: 'offer', sent: new Date().toISOString()});
@@ -187,15 +189,19 @@ class Connect extends Listenable() {
                     await Promise.all([
                         this._connection.setLocalDescription({type: "rollback"}),
                         this._connection.setRemoteDescription(offer)
-                    ])
+                    ]);
                 } catch (err) {
                     if (err.message.indexOf('rollback') >= 0) this._handleMissingRollback();
-                    else console.error(err);
+                    else throw err;
                 }
         } else {
             await this._connection.setRemoteDescription(offer);
         }
         if (this._verbose) console.log(this._id + ' received offer', offer);
+        if (['have-remote-offer','have-local-pranswer'].indexOf(this._connection.signalingState) === -1){
+            if(this._verbose) console.log('invalid state '+this._connection.signalingState+', do not create answer and stop');
+            return;
+        }
         const answer = await this._connection.createAnswer();
         await this._connection.setLocalDescription(answer);
         const msg = JSON.stringify({
@@ -214,6 +220,7 @@ class Connect extends Listenable() {
     }
 
     _addTrackToConnection(track, streams = []) {
+        this._addedTracks.push(track);
         if (this._connection.signalingState === "stable") {
             if (this._verbose) console.log('add track to connection ' + this._id, track);
             this._connection.addTransceiver(track, streams instanceof Array ? {
@@ -232,6 +239,7 @@ class Connect extends Listenable() {
 
     _removeTrackFromConnection(track) {
         let removed = 0;
+        this._addedTracks = this._addedTracks.filter(tr => tr.id ? tr.id !== track : tr !== track);
         this._connection.getTransceivers().forEach(transceiver => {
             // we obviously only remove our own tracks, therefore searching 'recvonly'-transceivers makes no sense
             if (transceiver.direction === "sendrecv" || transceiver.direction === "sendonly") {
@@ -249,6 +257,8 @@ class Connect extends Listenable() {
     }
 
     _replaceTrack(searchTrack, replacementTrack) {
+        const i = this._addedTracks.findIndex(tr => tr.id ? tr.id === searchTrack.id : tr === searchTrack);
+        if(i !== -1) this._addedTracks[i] = replacementTrack;
         const searchingActualTrack = searchTrack instanceof MediaStreamTrack;
         const searchingTrackKind = typeof searchTrack === "string" && (track === "audio" || track === "video");
         this._connection.getTransceivers().forEach(transceiver => {
@@ -298,20 +308,27 @@ class Connect extends Listenable() {
             }
         }
     }
-
+    /**
+     * removes the given media from the connection
+     * @param media [MediaStream|MediaStreamTrack|MediaStreamTrackKind|undefined]
+     * allows to resume all media from the given stream or stream description ("audio" removing all tracks of kind audio, no argument or '*' removing all media)
+     * */
     removeMedia(media) {
         if (media instanceof MediaStream) {
             media.getTracks().forEach(track => this._removeTrackFromConnection(track));
         } else if (media instanceof MediaStreamTrack) {
             this._removeTrackFromConnection(track);
         } else if (typeof media === "string" && (media === "audio" || media === "video")) {
-            stream.getTracks().forEach(track => this._removeTrackFromConnection(track))
+            this._removeTrackFromConnection(media);
+        } else if(typeof media === undefined || (typeof media === "string" && media === "*")){
+            this.tracks.forEach(track => this._removeTrackFromConnection(track));
         } else {
             console.error('unknown media type');
         }
     }
 
     /**
+     * @readonly
      * All received tracks of the given connection
      * */
     get tracks() {
@@ -319,12 +336,20 @@ class Connect extends Listenable() {
     }
 
     /**
-     * All streams of the given connection
+     * @readonly
+     * All received streams of the given connection
      * */
     get streams() {
         return this._receivedStreams;
     }
 
+    /**
+     * @readonly
+     * all locally added tracks of the given connection
+     * */
+    get addedTracks(){
+        return this._addedTracks;
+    }
 
     /**
      * close the connection
