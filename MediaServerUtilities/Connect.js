@@ -1,5 +1,6 @@
 const Listenable = require('./Listenable.js');
 const ID = () => new Date().getTime().toString(32) + Math.random().toString(32).substr(2,7);
+const timestamp = () => new Date().toISOString();
 
 /**
  * Introduces an abstraction layer around the RTCPeerConnection.
@@ -8,12 +9,15 @@ const ID = () => new Date().getTime().toString(32) + Math.random().toString(32).
  * */
 class Connect extends Listenable() {
 
-    constructor({id = ID(), peer = null, signaller, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = () => false} = {}) {
+    constructor({id = ID(), peer = null, name = null, signaller, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = () => false} = {}) {
         super();
+        this._offering = false;
+        this._ignoredOffer = false;
         this._signaller = signaller;
         this._connectionConfig = {iceServers, sdpSemantics: useUnifiedPlan ? 'unified-plan' : 'plan-b'};
         this._id = id;
         this._peer = peer || this._id;
+        this._name = name;
         this._signaller.addEventListener('message', e => this._handleSignallingMessage(e.data));
         this._verbose = verbose;
         this._isYielding = isYielding;
@@ -57,10 +61,20 @@ class Connect extends Listenable() {
     _setupPeerConnection() {
         this._connection = new RTCPeerConnection(this._connectionConfig);
         this._connection.addEventListener('icecandidate', e => this._forwardIceCandidate(e.candidate));
-        this._connection.addEventListener('negotiationneeded', () => this._initiateHandshakeWithOffer());
+        this._connection.addEventListener('negotiationneeded', () => {
+            // avoid chrome triggering multiple negotiation needed events for multiple tracks that are added simultaneously
+            if(this._isNegotiating) return;
+            this._isNegotiating = true;
+            this._initiateHandshake()
+        });
+        this._connection.addEventListener('signalingstatechange', () => this._isNegotiating = (this._connection.signalingState !== "stable"));
         this._connection.addEventListener('iceconnectionstatechange', () => this._detectDisconnection());
         this._connection.addEventListener('track', ({track, streams}) => this._handleIncomingTrack(track, streams));
         if (this._verbose) console.log('created new peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
+    }
+
+    _announceCall(){
+
     }
 
     _handleIncomingTrack(track, streams) {
@@ -94,22 +108,31 @@ class Connect extends Listenable() {
             const msg = JSON.stringify({
                 receiver: this._peer,
                 data: candidate,
-                sent: new Date().toISOString(),
+                sent: timestamp(),
                 type: 'ice'
             });
             this._signaller.send(msg);
         }
     }
 
-    async _initiateHandshakeWithOffer() {
-        if (this._connection.signalingState !== "stable") return;
-        const offer = await this._connection.createOffer();
-        if (this._connection.signalingState !== "stable") return;
-        await this._connection.setLocalDescription(offer);
-        if (this._verbose) console.log('created offer on connection ' + this._id + ':', offer);
-        const msg = JSON.stringify({receiver: this._peer, data: offer, type: 'offer', sent: new Date().toISOString()});
-        this._signaller.send(msg);
-        this.dispatchEvent('negotiationstarted');
+    async _initiateHandshake() {
+        // start a perfect negotiation offer-answer exchange
+        try{
+            this._offering = true;
+            await this._connection.setLocalDescription();
+            if (this._verbose) console.log('set local description on connection ' + this._id + ':', this._connection.localDescription);
+            const msg = JSON.stringify({
+                receiver: this._peer,
+                data: this._connection.localDescription,
+                type: 'sdp',
+                sent: timestamp()
+            });
+            this._signaller.send(msg);
+        }catch(err){
+            console.error(err);
+        }finally{
+            this._offering = false;
+        }
     }
 
     _handleSignallingMessage(msg) {
@@ -121,19 +144,14 @@ class Connect extends Listenable() {
         msg = JSON.parse(msg);
         // when someone else sent the message, it is obviously of none interest to the connection between the peer and us
         if(msg.sender !== this._peer) return;
+        if(this._name && msg.receiver !== '*' && msg.receiver !== this._name) console.warn('received message not ment for this peer');
         if (this._verbose) console.log(this._id + ' received message', msg);
         switch (msg.type) {
-            case "offer":
-                this._handleIncomingOffer(msg.data);
-                break;
-            case "answer":
-                this._finishHandshake(msg.data);
+            case "sdp":
+                this._handleSdp(msg.data);
                 break;
             case "ice":
                 this._handleRemoteIceCandidate(msg.data);
-                break;
-            case "restart":
-                this._handleMissingRollback();
                 break;
             case "connection:close":
                 this._handleClosingConnection();
@@ -143,10 +161,6 @@ class Connect extends Listenable() {
         }
     }
 
-    _handleMissingRollback() {
-        this._connection.close();
-        this._setupPeerConnection();
-    }
 
     _handleClosingConnection() {
         this._receivedTracks.forEach(track => track.stop());
@@ -154,84 +168,66 @@ class Connect extends Listenable() {
         this.dispatchEvent('close');
     }
 
-    _handleRemoteIceCandidate(candidate) {
-        const addIceCandidate = (candidate) => {
-            if (this._verbose) console.log('adding ice candidate for ' + this._id + ':', candidate);
-            this._connection.addIceCandidate(candidate).catch(console.error);
-        };
+    async _handleRemoteIceCandidate(candidate) {
         if (candidate !== null) {
-            if (this._connection.remoteDescription) {
-                addIceCandidate(candidate)
-            } else {
-                if (this._verbose) console.log('postponing ice candidate for ' + this._id + ' due to missing offer');
+                if (this._verbose) console.log('adding ice candidate for ' + this._id + ':', candidate);
                 let tries = 0;
-                let maxTries = 3;
-                let waitMillisecondsBeforeNextTry = 1000;
-                const checkInterval = setInterval(() => {
-                    if (tries === maxTries) {
-                        clearInterval(checkInterval);
-                        console.error('could not set ice candidate due to missing remote description');
+                let maxTries = 10;
+                const trySettingCandidate = setInterval(async () => {
+                    try{
+                        // try to add the ice candidate to the remote description.
+                        // If there is no remote description, wait a very short time
+                        if(this._connection.remoteDescription){
+                            await this._connection.addIceCandidate(candidate);
+                            clearInterval(trySettingCandidate);
+                        }else{
+                            tries++;
+                        }
+                        if(tries >= maxTries){
+                            clearInterval(trySettingCandidate);
+                            console.error('failed to add ice candidate, no offer on time');
+                        }
+                    }catch(err){
+                        clearInterval(trySettingCandidate);
+                        // if we ignored an offer due to glare, do not throw the error, only when the error has other reasons
+                        if(!this._ignoredOffer) throw err;
                     }
-                    if (this._connection.remoteDescription) {
-                        addIceCandidate(candidate);
-                    } else {
-                        tries++;
-                    }
-                }, waitMillisecondsBeforeNextTry);
+                }, 100);
+        }
+    }
+
+    async _handleSdp(description){
+        try {
+            const collision = this._connection.signalingState !== "stable" || this._offering;
+            if (this._ignoredOffer = !this._isYielding(this._peer) && description.type === "offer" && collision) {
+                return;
             }
+            await this._connection.setRemoteDescription(description); // SRD rolls back as needed
+            if (description.type === "offer") {
+                await this._connection.setLocalDescription();
+                this._signaller.send(JSON.stringify({type: 'sdp', receiver: this._peer, data: this._connection.localDescription, sent: timestamp()}));
+            }
+        } catch (err) {
+            console.error(err);
         }
-    }
-
-    async _handleIncomingOffer(offer) {
-        if (this._connection.signalingState !== "stable") {
-            if (this._isYielding(this._peer))
-                try {
-                    await Promise.all([
-                        this._connection.setLocalDescription({type: "rollback"}),
-                        this._connection.setRemoteDescription(offer)
-                    ]);
-                } catch (err) {
-                    if (err.message.indexOf('rollback') >= 0) this._handleMissingRollback();
-                    else throw err;
-                }
-        } else {
-            await this._connection.setRemoteDescription(offer);
-        }
-        if (this._verbose) console.log(this._id + ' received offer', offer);
-        if (['have-remote-offer','have-local-pranswer'].indexOf(this._connection.signalingState) === -1){
-            if(this._verbose) console.log('invalid state '+this._connection.signalingState+', do not create answer and stop');
-            return;
-        }
-        const answer = await this._connection.createAnswer();
-        await this._connection.setLocalDescription(answer);
-        const msg = JSON.stringify({
-            receiver: this._peer,
-            data: answer,
-            type: "answer",
-            sent: new Date().toISOString()
-        });
-        this._signaller.send(msg);
-        this.dispatchEvent('receivednegotiation');
-    }
-
-    async _finishHandshake(answer) {
-        await this._connection.setRemoteDescription(answer);
-        this.dispatchEvent('finishednegotiation');
     }
 
     _addTrackToConnection(track, streams = []) {
         this._addedTracks.push(track);
-        if (this._connection.signalingState === "stable") {
+        if (this._connection.signalingState === "stable" && !this._offering) {
             if (this._verbose) console.log('add track to connection ' + this._id, track);
-            this._connection.addTransceiver(track, streams instanceof Array ? {
+            const config = {
                 direction: "sendonly",
                 streams
-            } : streams);
+            };
+            this._connection.addTransceiver(track, streams instanceof Array ? config : streams);
         } else {
             if (this._verbose) console.log('postpone adding media due to ongoing sdp handshake');
             const trackHandle = () => {
-                if (this._connection.signalingState === "stable") this._addTrackToConnection(track, streams);
-                this._connection.removeEventListener('signalingstatechange', trackHandle);
+                if (this._connection.signalingState === "stable" && !this._offering){
+                    this._addTrackToConnection(track, streams);
+                    this._connection.removeEventListener('signalingstatechange', trackHandle);
+                }
             };
             this._connection.addEventListener('signalingstatechange', trackHandle);
         }
@@ -239,16 +235,19 @@ class Connect extends Listenable() {
 
     _removeTrackFromConnection(track) {
         let removed = 0;
-        this._addedTracks = this._addedTracks.filter(tr => tr.id ? tr.id !== track : tr !== track);
+        const searchingTrackKind = typeof track === "string" && (track === "audio" || track === "video" || '*');
+        const searchingActualTrack = track instanceof MediaStreamTrack;
+        this._addedTracks = this._addedTracks.filter(tr => (searchingActualTrack && !tr.id !== track.id) || (searchingTrackKind && (tr.kind === track || track === '*')));
         this._connection.getTransceivers().forEach(transceiver => {
             // we obviously only remove our own tracks, therefore searching 'recvonly'-transceivers makes no sense
             if (transceiver.direction === "sendrecv" || transceiver.direction === "sendonly") {
-                const searchingTrackKind = typeof track === "string" && (track === "audio" || track === "video");
-                const searchingActualTrack = track instanceof MediaStreamTrack;
-                if (transceiver.sender.track && (searchingActualTrack && transceiver.sender.track.id === track.id) || (searchingTrackKind && transceiver.sender.track.kind === track)) {
-                    transceiver.sender.track.stop();
+                const tr = transceiver.sender.track;
+                console.log(tr, track, 'searchingActualTrack'+searchingActualTrack, 'searchingTrackKind'+searchingTrackKind);
+                if (tr && (searchingActualTrack && tr.id === track.id) || (searchingTrackKind && (tr.kind === track || track === '*'))) {
                     if (transceiver.direction === "sendrecv") transceiver.direction = "recvonly";
                     else transceiver.direction = "inactive";
+                    // mute the given track, removing its content
+                    transceiver.sender.replaceTrack(null);
                     removed++;
                 }
             }
@@ -257,10 +256,10 @@ class Connect extends Listenable() {
     }
 
     _replaceTrack(searchTrack, replacementTrack) {
-        const i = this._addedTracks.findIndex(tr => tr.id ? tr.id === searchTrack.id : tr === searchTrack);
-        if(i !== -1) this._addedTracks[i] = replacementTrack;
         const searchingActualTrack = searchTrack instanceof MediaStreamTrack;
-        const searchingTrackKind = typeof searchTrack === "string" && (track === "audio" || track === "video");
+        const searchingTrackKind = typeof searchTrack === "string" && (track === "audio" || track === "video" || '*');
+        const i = this._addedTracks.findIndex(tr => (searchingActualTrack && tr.id === searchTrack.id) || (searchingTrackKind && (tr.kind === searchTrack || searchTrack === '*')));
+        if(i !== -1) this._addedTracks[i] = replacementTrack;
         this._connection.getTransceivers().forEach(transceiver => {
             // again, we only replace our own tracks, no need to look at 'recvonly'-transceivers
             if (transceiver.direction === "sendrecv" || transceiver.direction === "sendonly") {
@@ -272,8 +271,15 @@ class Connect extends Listenable() {
     }
 
     _detectDisconnection() {
-        if (this._connection.iceConnectionState === "disconnected") this._connection.close();
-        this.dispatchEvent('close');
+        // if the other side is away, close down the connection
+        if (this._connection.iceConnectionState === "disconnected"){
+            this._connection.close();
+            this.dispatchEvent('close');
+        }
+        // if the connection failed, restart the ice gathering process according to the spec, will lead to negotiationneeded event
+        if(this._connection.iceConnectionState === "failed"){
+            this._connection.restartIce();
+        }
     }
 
     /**
@@ -321,7 +327,7 @@ class Connect extends Listenable() {
         } else if (typeof media === "string" && (media === "audio" || media === "video")) {
             this._removeTrackFromConnection(media);
         } else if(typeof media === undefined || (typeof media === "string" && media === "*")){
-            this.tracks.forEach(track => this._removeTrackFromConnection(track));
+            this._removeTrackFromConnection("*");
         } else {
             console.error('unknown media type');
         }
@@ -359,7 +365,7 @@ class Connect extends Listenable() {
             receiver: this._peer,
             data: 'immediately',
             type: 'connection:close',
-            sent: new Date().toISOString()
+            sent: timestamp()
         });
         this._signaller.send(msg);
         this._connection.close();

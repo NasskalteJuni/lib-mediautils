@@ -24,7 +24,7 @@ class ConnectionManager extends Listenable(){
             switch(msg.type){
                 case "user:connected":
                     if(this._verbose) console.log('new user connected', msg.data);
-                    this.connections[msg.data] = new Connect({peer: msg.data, iceServers, signaller: this._signaller, useUnifiedPlan, isYielding, verbose});
+                    this.connections[msg.data] = new Connect({peer: msg.data, name, iceServers, signaller: this._signaller, useUnifiedPlan, isYielding, verbose});
                     this.dispatchEvent('userconnected', [msg.data]);
                     this._forwardEvents(this.connections[msg.data]);
                     this.localMediaStreams.forEach(stream => this.connections[msg.data].addMedia(stream));
@@ -37,7 +37,7 @@ class ConnectionManager extends Listenable(){
                 case "user:list":
                     if(this._verbose) console.log('list of users received', msg.data);
                     msg.data.filter(u => !this.connections[u]).forEach(u => {
-                        this.connections[u] = new Connect({peer: u, iceServers, signaller: this._signaller, useUnifiedPlan, isYielding, verbose});
+                        this.connections[u] = new Connect({peer: u, name, iceServers, signaller: this._signaller, useUnifiedPlan, isYielding, verbose});
                         if(this._verbose) console.log('new user (of list) connected', u);
                         this.dispatchEvent('userconnected', [msg.data]);
                         this._forwardEvents(this.connections[u]);

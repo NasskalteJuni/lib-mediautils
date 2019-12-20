@@ -16,9 +16,11 @@ class BrowserEnvironment extends Listenable(){
     static _getPuppet() {
         if (!BrowserEnvironment._browser) {
             const isDebug = BrowserEnvironment.debug;
+            // TODO: solve the path issue
+            const path = 'C:\\Users\\lukas\\AppData\\Local\\Google\\Chrome SxS\\Application\\chrome.exe';
             const flags = ["--allow-insecure-localhost","--autoplay-policy=no-user-gesture-required","--no-user-gesture-required"];
             if(isDebug) flags.push("--webrtc-event-logging");
-            return puppeteer.launch({headless: !isDebug, devtools: isDebug, args: flags}).then(browser => {
+            return puppeteer.launch({headless: !isDebug, devtools: isDebug, executablePath: path, args: flags}).then(browser => {
                 BrowserEnvironment._browser = browser;
                 return browser;
             });

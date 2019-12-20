@@ -5,7 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><%=title%></title>
     <link href="style.css" rel="stylesheet" type="text/css">
+    <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/webrtc-adapter/7.3.0/adapter.min.js"></script>-->
     <script src="bundle.min.js"></script>
+    <style>
+        #display{
+            width: 640px;
+            height: 480px;
+            background-color: black;
+        }
+    </style>
 </head>
 <body>
 <aside id="users">
@@ -47,7 +55,7 @@
     const signaller = new WebSocket(location.origin.replace(/^http/,'ws'));
     const connections = new MediaUtilities.ConnectionManager({name, verbose, signaller});
     const mediaserver = new MediaUtilities.Connect({peer: '@mcu', verbose, signaller, isYielding: () => false});
-    const videoMixer = new MediaUtilities.VideoMixer();
+    const videoMixer = new MediaUtilities.VideoMixer({width: 640, height: 480});
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Line(0, true), 'line');
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Grid(1, ids => [4,6,9].indexOf(ids.length)), 'grid');
     const audioMixer = new MediaUtilities.AudioMixer();
@@ -81,10 +89,10 @@
             if(cam){
                 if(architecture === 'mesh'){
                     connections.addMedia(cam);
-                    mediaserver.removeMedia(cam);
+                    mediaserver.removeMedia('*');
                 }else if(architecture === 'mcu'){
                     mediaserver.addMedia(cam);
-                    connections.removeMedia(cam);
+                    connections.removeMedia('*');
                 }
             }
             // redirect the output. mesh is mixed locally, mediaserver remotely, add mixed stream to display

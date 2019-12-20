@@ -4,19 +4,18 @@ const mcu = require('./mcu.js');
 const sockets = {};
 const broadcast = (msg, exclude=[]) => Object.keys(sockets).filter(user => exclude.indexOf(user) === -1).forEach(receiver => sockets[receiver].send(JSON.stringify(msg)));
 const timestamp = () => new Date().toISOString();
-let architecture = 'mcu';
+let architecture = 'mesh';
 
 // handle mcu communication
 const handleMcuToSocketCommunication = () => {
     mcu.Tunnel.onExport(function(msg){
-        console.log('exported', msg);
         const socket = sockets[msg.receiver];
         if(socket){
             msg.sender = "@mcu";
             socket.send(JSON.stringify(msg));
         }else{
             // inform the mcu that by now, no socket for that user exists any more and therefore, drop the user
-            mcu.env.Tunnel.doImport({type: 'user:disconnected', receiver: '@mcu', sender: '@server', sent: timestamp(), transmitted: timestamp()});
+            mcu.Tunnel.doImport({type: 'user:disconnected', receiver: '@mcu', sender: '@server', sent: timestamp(), transmitted: timestamp()});
         }
     });
 };
@@ -57,7 +56,6 @@ module.exports = server => server.on('upgrade', (req, sock, body) => {
                         msg.sender = '@server';
                         broadcast(msg);
                 }else if(msg.receiver === '@mcu'){
-                    console.log('imported', msg);
                     mcu.Tunnel.doImport('message', msg);
                 }else if(msg.receiver) {
                     if (sockets[msg.receiver]) sockets[msg.receiver].send(JSON.stringify(msg));
