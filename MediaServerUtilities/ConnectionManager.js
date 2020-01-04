@@ -6,13 +6,12 @@ class ConnectionManager extends Listenable(){
     /**
      * create a new peer connection manager who handles everything related to transmitting media via RTCPeerConnections
      * */
-    constructor({name = null, signaller = null, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = false} = {}){
+    constructor({name = null, signaller = null, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = undefined} = {}){
         super();
         this._signaller = signaller || new WebSocket(location.origin.replace(/^http/,'ws'));
         this._verbose = verbose;
         this.connections = {};
         this.localMediaStreams = [];
-        isYielding = isYielding || (name === null ? () => false : other => name.localeCompare(other));
         this._signaller.addEventListener('message', e => {
             let msg;
             try{

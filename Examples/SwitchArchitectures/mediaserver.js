@@ -1,1 +1,0 @@
-const connections = new MediaUtilities.ConnectionManager();

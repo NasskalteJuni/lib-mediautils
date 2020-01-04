@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Glare</title>
+    <script src="../../dist/bundle.min.js"></script>
+    <script>
+        const _signalled = [];
+        const signaller = ({peer, self}) => {
+            const sig = {
+                peer,
+                self,
+                _listeners: [],
+                send: function socketSendStub(msg) {
+                    msg = JSON.parse(msg);
+                    msg.sender = self;
+                    msg.transmitted = new Date().toISOString();
+                    if(msg.type === 'sdp') console.log(msg);
+                    const i = _signalled.findIndex(s => (msg.receiver === s.self) || (msg.receiver === '*' && s.self !== msg.sender));
+                    if(i === -1) return console.warn('unable to send', msg);
+                    msg = JSON.stringify(msg);
+                    _signalled[i]._listeners.forEach(cb => cb({data: msg}));
+                },
+                addEventListener: function socketOnMessageStub(type, cb) {
+                    if (type.toLowerCase() !== 'message') return console.error('mock not implementing anything except message');
+                    this._listeners.push(cb);
+                }
+            };
+            _signalled.push(sig);
+            return sig;
+        };
+    </script>
+</head>
+<body>
+<button id="start">try generating glare</button>
+<script>
+    const a = new MediaUtilities.Connect({peer: 'b', name: 'a', signaller: signaller({self: 'a', peer: 'b', verbose: true})});
+    const b = new MediaUtilities.Connect({peer: 'a', name: 'b', signaller: signaller({self: 'b', peer: 'a', verbose: true})});
+    const button = document.getElementById("start");
+    button.addEventListener('click', async function(){
+        const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+        a.addMedia(stream);
+        b.addMedia(stream);
+    });
+</script>
+</body>
+</html>

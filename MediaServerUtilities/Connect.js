@@ -9,7 +9,7 @@ const timestamp = () => new Date().toISOString();
  * */
 class Connect extends Listenable() {
 
-    constructor({id = ID(), peer = null, name = null, signaller, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = () => false} = {}) {
+    constructor({id = ID(), peer = null, name = null, signaller, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = undefined} = {}) {
         super();
         this._offering = false;
         this._ignoredOffer = false;
@@ -20,7 +20,7 @@ class Connect extends Listenable() {
         this._name = name;
         this._signaller.addEventListener('message', e => this._handleSignallingMessage(e.data));
         this._verbose = verbose;
-        this._isYielding = isYielding;
+        this._isYielding = isYielding === undefined ? (this._name ? this._name.localeCompare(this._peer) > 0 : false) : isYielding;
         this._setupPeerConnection();
         this._receivedStreams = [];
         this._receivedTracks = [];
@@ -73,9 +73,6 @@ class Connect extends Listenable() {
         if (this._verbose) console.log('created new peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
     }
 
-    _announceCall(){
-
-    }
 
     _handleIncomingTrack(track, streams) {
         const newStreams = [];
@@ -127,7 +124,7 @@ class Connect extends Listenable() {
                 type: 'sdp',
                 sent: timestamp()
             });
-            this._signaller.send(msg);
+            if (this._connection.localDescription) this._signaller.send(msg);
         }catch(err){
             console.error(err);
         }finally{
@@ -163,6 +160,7 @@ class Connect extends Listenable() {
 
 
     _handleClosingConnection() {
+        if(this._verbose) console.log('connection closing down');
         this._receivedTracks.forEach(track => track.stop());
         this._connection.close();
         this.dispatchEvent('close');
@@ -197,15 +195,17 @@ class Connect extends Listenable() {
     }
 
     async _handleSdp(description){
+        if(this._verbose) console.log('received sdp', description);
         try {
             const collision = this._connection.signalingState !== "stable" || this._offering;
-            if (this._ignoredOffer = !this._isYielding(this._peer) && description.type === "offer" && collision) {
+            if (this._ignoredOffer = !this._isYielding && description.type === "offer" && collision) {
+                if(this._verbose) console.log('ignored offer due to glare');
                 return;
             }
             await this._connection.setRemoteDescription(description); // SRD rolls back as needed
             if (description.type === "offer") {
                 await this._connection.setLocalDescription();
-                this._signaller.send(JSON.stringify({type: 'sdp', receiver: this._peer, data: this._connection.localDescription, sent: timestamp()}));
+                if(this._connection.localDescription) this._signaller.send(JSON.stringify({type: 'sdp', receiver: this._peer, data: this._connection.localDescription, sent: timestamp()}));
             }
         } catch (err) {
             console.error(err);
@@ -235,9 +235,11 @@ class Connect extends Listenable() {
 
     _removeTrackFromConnection(track) {
         let removed = 0;
-        const searchingTrackKind = typeof track === "string" && (track === "audio" || track === "video" || '*');
+        const searchingTrackKind = typeof track === "string" && (track === "audio" || track === "video" || track === '*');
         const searchingActualTrack = track instanceof MediaStreamTrack;
-        this._addedTracks = this._addedTracks.filter(tr => (searchingActualTrack && !tr.id !== track.id) || (searchingTrackKind && (tr.kind === track || track === '*')));
+        if(searchingActualTrack) this._addedTracks = this._addedTracks.filter(tr => tr.id !== track.id);
+        else if(searchingTrackKind) this._addedTracks = this._addedTracks.filter(tr => track !== '*' && tr.kind !== track);
+        else console.error('could not handle received track', track);
         this._connection.getTransceivers().forEach(transceiver => {
             // we obviously only remove our own tracks, therefore searching 'recvonly'-transceivers makes no sense
             if (transceiver.direction === "sendrecv" || transceiver.direction === "sendonly") {
@@ -247,7 +249,7 @@ class Connect extends Listenable() {
                     if (transceiver.direction === "sendrecv") transceiver.direction = "recvonly";
                     else transceiver.direction = "inactive";
                     // mute the given track, removing its content
-                    transceiver.sender.replaceTrack(null);
+                    this._connection.removeTrack(sender);
                     removed++;
                 }
             }
@@ -257,7 +259,7 @@ class Connect extends Listenable() {
 
     _replaceTrack(searchTrack, replacementTrack) {
         const searchingActualTrack = searchTrack instanceof MediaStreamTrack;
-        const searchingTrackKind = typeof searchTrack === "string" && (track === "audio" || track === "video" || '*');
+        const searchingTrackKind = typeof searchTrack === "string" && (track === "audio" || track === "video" || track === '*');
         const i = this._addedTracks.findIndex(tr => (searchingActualTrack && tr.id === searchTrack.id) || (searchingTrackKind && (tr.kind === searchTrack || searchTrack === '*')));
         if(i !== -1) this._addedTracks[i] = replacementTrack;
         this._connection.getTransceivers().forEach(transceiver => {
@@ -269,6 +271,29 @@ class Connect extends Listenable() {
             }
         })
     }
+
+
+    _muteTrack(track, muted=true){
+        const searchingActualTrack = track instanceof MediaStreamTrack;
+        const searchingTrackKind = typeof track === "string" && (['audio', 'video', '*'].indexOf(track) >= 0);
+        this._connection.getTransceivers().forEach(transceiver => {
+            if((searchingActualTrack && transceiver.sender.track.id === track.id) || (searchingTrackKind && (track === '*' || transceiver.sender.track.kind === track))){
+                if(muted){
+                    if(!transceiver.sender._muted){
+                        transceiver.sender._muted = transceiver.sender.track;
+                        transceiver.sender.replace(null)
+                    }
+                }else{
+                    if(transceiver.sender._muted){
+                        transceiver.sender.replace(transceiver.sender._muted);
+                        delete transceiver.sender['_muted'];
+                    }
+                }
+            }
+        });
+    }
+
+
 
     _detectDisconnection() {
         // if the other side is away, close down the connection
@@ -310,10 +335,11 @@ class Connect extends Listenable() {
                 const stream = await navigator.mediaDevices.getUserMedia(media);
                 stream.getTracks().forEach(track => this._addTrackToConnection(track, [stream]))
             } else {
-                console.error('unknown media type');
+                console.error('unknown media type', typeof media, media);
             }
         }
     }
+
     /**
      * removes the given media from the connection
      * @param media [MediaStream|MediaStreamTrack|MediaStreamTrackKind|undefined]
@@ -326,27 +352,46 @@ class Connect extends Listenable() {
             this._removeTrackFromConnection(track);
         } else if (typeof media === "string" && (media === "audio" || media === "video")) {
             this._removeTrackFromConnection(media);
-        } else if(typeof media === undefined || (typeof media === "string" && media === "*")){
+        } else if(typeof media === undefined || arguments.length === 0 || (typeof media === "string" && media === "*")){
             this._removeTrackFromConnection("*");
         } else {
-            console.error('unknown media type');
+            console.error('unknown media type', typeof media, media);
+        }
+    }
+
+    /**
+     * set the muted state of the given media
+     * @param media [MediaStream|MediaStreamTrack|MediaStreamTrackKind|String|undefined] the media to mute. If omitted or undefined, all media is muted
+     * @param muted [boolean=true] flag to define if the given media should be muted, or unmuted. If already in given state, no action is taken
+     * */
+    muteMedia(media, muted=true){
+        if (media instanceof MediaStream){
+            media.getTracks().forEach(track => this._muteTrack(track, muted))
+        } else if (media instanceof MediaStreamTrack) {
+            this._muteTrack(media, muted)
+        } else if (typeof media === "string" && (media === "audio" || media === "video")) {
+            this._muteTrack(media, muted);
+        } else if(typeof media === undefined || arguments.length === 0 || (typeof media === "string" && media === "*")){
+            this._muteTrack("*", muted);
+        } else {
+            console.error('unknown media type', typeof media, media);
         }
     }
 
     /**
      * @readonly
-     * All received tracks of the given connection
+     * All non-muted received tracks of the given connection
      * */
     get tracks() {
-        return this._receivedTracks;
+        return this._receivedTracks.filter(track => !track.muted);
     }
 
     /**
      * @readonly
-     * All received streams of the given connection
+     * All active received streams of the given connection
      * */
     get streams() {
-        return this._receivedStreams;
+        return this._receivedStreams.filter(stream => stream.active);
     }
 
     /**

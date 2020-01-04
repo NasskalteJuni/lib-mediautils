@@ -48,13 +48,15 @@ module.exports = server => server.on('upgrade', (req, sock, body) => {
                 msg.sender = user;
                 msg.transmitted = new Date().toISOString();
                 if(msg.receiver === '@server') {
-                    if(msg.type === 'architecture:change')
+                    if(msg.type === 'architecture:change'){
                         msg.data = msg.data.toLowerCase();
                         if(['mcu','mesh','sfu'].indexOf(msg.data) === -1) error('unknown architecture type '+msg.data);
                         if(architecture === msg.data) return ws.send(JSON.stringify({receiver: user, sender: '@server', type: 'architecture:change', data: msg.data, sent: timestamp(), transmitted: timestamp()}))
                         architecture = msg.data;
                         msg.sender = '@server';
                         broadcast(msg);
+                        mcu.Tunnel.doImport('architecture', msg.data);
+                    }
                 }else if(msg.receiver === '@mcu'){
                     mcu.Tunnel.doImport('message', msg);
                 }else if(msg.receiver) {

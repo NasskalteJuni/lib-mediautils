@@ -54,7 +54,7 @@
     const verbose = true;
     const signaller = new WebSocket(location.origin.replace(/^http/,'ws'));
     const connections = new MediaUtilities.ConnectionManager({name, verbose, signaller});
-    const mediaserver = new MediaUtilities.Connect({peer: '@mcu', verbose, signaller, isYielding: () => false});
+    const mediaserver = new MediaUtilities.Connect({peer: '@mcu', verbose, signaller, isYielding: false});
     const videoMixer = new MediaUtilities.VideoMixer({width: 640, height: 480});
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Line(0, true), 'line');
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Grid(1, ids => [4,6,9].indexOf(ids.length)), 'grid');
@@ -89,10 +89,10 @@
             if(cam){
                 if(architecture === 'mesh'){
                     connections.addMedia(cam);
-                    mediaserver.removeMedia('*');
+                    mediaserver.removeMedia();
                 }else if(architecture === 'mcu'){
                     mediaserver.addMedia(cam);
-                    connections.removeMedia('*');
+                    connections.removeMedia();
                 }
             }
             // redirect the output. mesh is mixed locally, mediaserver remotely, add mixed stream to display

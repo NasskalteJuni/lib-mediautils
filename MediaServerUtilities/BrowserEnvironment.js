@@ -2,8 +2,13 @@ const puppeteer = require('puppeteer');
 const read = require('fs').readFileSync;
 const Tunnel = require('./_Tunnel.js');
 const Listenable = require('./Listenable.js');
+let executablePath = 'C:\\Users\\lukas\\AppData\\Local\\Google\\Chrome SxS\\Application\\chrome.exe';
 
 class BrowserEnvironment extends Listenable(){
+
+    static set executablePath(path){
+        executablePath = path;
+    }
 
     static set debug(bool) {
         BrowserEnvironment._debug = bool;
@@ -16,11 +21,9 @@ class BrowserEnvironment extends Listenable(){
     static _getPuppet() {
         if (!BrowserEnvironment._browser) {
             const isDebug = BrowserEnvironment.debug;
-            // TODO: solve the path issue
-            const path = 'C:\\Users\\lukas\\AppData\\Local\\Google\\Chrome SxS\\Application\\chrome.exe';
             const flags = ["--allow-insecure-localhost","--autoplay-policy=no-user-gesture-required","--no-user-gesture-required"];
             if(isDebug) flags.push("--webrtc-event-logging");
-            return puppeteer.launch({headless: !isDebug, devtools: isDebug, executablePath: path, args: flags}).then(browser => {
+            return puppeteer.launch({headless: !isDebug, devtools: isDebug, executablePath, args: flags}).then(browser => {
                 BrowserEnvironment._browser = browser;
                 return browser;
             });
@@ -56,6 +59,7 @@ class BrowserEnvironment extends Listenable(){
             */
             this.Tunnel = new Tunnel(this);
             await this.Tunnel.open();
+            await handleScript(require.resolve('./_TunnelSocketWrapper.js'));
             await handleScript(require.resolve('../dist/bundle.min.js'));
             await Promise.all(Object.keys(this._globals).map(globalName => {
                 this._instance.evaluate((globalName, globalValue) => window[globalName] = globalValue, [globalName, this._globals[globalName]])
