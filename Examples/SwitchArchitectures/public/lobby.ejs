@@ -42,7 +42,6 @@
         button.addEventListener('click', () => {
             const switchToArchitecture = architecture === 'mesh' ? 'mcu' : 'mesh';
             signaller.send(JSON.stringify({type: 'architecture:change', receiver: '@server', data: switchToArchitecture, sent: new Date().toISOString()}));
-            console.log('architecture changed to '+architecture);
         });
         document.querySelector('main').appendChild(button);
     }
@@ -73,10 +72,6 @@
         videoMixer.removeStream(peer+'-'+stream.id);
         audioMixer.removeStream(peer+'-'+stream.id);
     })
-    mediaserver.addEventListener('streamadded', (stream) => {
-        display.srcObject = stream;
-        if(display.paused) display.play();
-    });
     signaller.addEventListener('message', e => {
         const msg = JSON.parse(e.data);
         if(msg.type === 'architecture:change'){
@@ -97,7 +92,7 @@
             }
             // redirect the output. mesh is mixed locally, mediaserver remotely, add mixed stream to display
             if(architecture === 'mesh'){
-                display.srcObject = mixed;
+                display.srcObject = new MediaStream([videoMixer.outputTrack, audioMixer.outputTrack]);
             }else if(architecture === 'mcu'){
                 display.srcObject = mediaserver.streams[0];
             }
@@ -105,7 +100,7 @@
     })
     const addMediaButton = document.getElementById("addMedia");
     addMediaButton.addEventListener("click", async () => {
-        cam = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+        cam = await navigator.mediaDevices.getUserMedia({video: {width: {exact: 640}, height: {exact: 480}}, audio: true});
         if(architecture === 'mesh') connections.addMedia(cam);
         else if(architecture === 'mcu') mediaserver.addMedia(cam);
         addMediaButton.parentNode.removeChild(addMediaButton);

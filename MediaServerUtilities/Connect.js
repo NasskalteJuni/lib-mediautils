@@ -62,8 +62,6 @@ class Connect extends Listenable() {
         this._connection = new RTCPeerConnection(this._connectionConfig);
         this._connection.addEventListener('icecandidate', e => this._forwardIceCandidate(e.candidate));
         this._connection.addEventListener('negotiationneeded', () => {
-            // avoid chrome triggering multiple negotiation needed events for multiple tracks that are added simultaneously
-            if(this._isNegotiating) return;
             this._isNegotiating = true;
             this._initiateHandshake()
         });
@@ -116,15 +114,17 @@ class Connect extends Listenable() {
         // start a perfect negotiation offer-answer exchange
         try{
             this._offering = true;
-            await this._connection.setLocalDescription();
+            const offer = await this._connection.createOffer();
+            if(this._connection.signalingState !== "stable") return;
             if (this._verbose) console.log('set local description on connection ' + this._id + ':', this._connection.localDescription);
+            await this._connection.setLocalDescription(offer);
             const msg = JSON.stringify({
                 receiver: this._peer,
-                data: this._connection.localDescription,
+                data: offer,
                 type: 'sdp',
                 sent: timestamp()
             });
-            if (this._connection.localDescription) this._signaller.send(msg);
+            this._signaller.send(msg);
         }catch(err){
             console.error(err);
         }finally{
@@ -132,7 +132,7 @@ class Connect extends Listenable() {
         }
     }
 
-    _handleSignallingMessage(msg) {
+    async _handleSignallingMessage(msg) {
         // ignore empty messages, warn in verbose mode
         if (!msg) {
             if (this._verbose) console.log('received empty message, abort!');
@@ -143,19 +143,31 @@ class Connect extends Listenable() {
         if(msg.sender !== this._peer) return;
         if(this._name && msg.receiver !== '*' && msg.receiver !== this._name) console.warn('received message not ment for this peer');
         if (this._verbose) console.log(this._id + ' received message', msg);
-        switch (msg.type) {
-            case "sdp":
-                this._handleSdp(msg.data);
-                break;
-            case "ice":
-                this._handleRemoteIceCandidate(msg.data);
-                break;
-            case "connection:close":
-                this._handleClosingConnection();
-                break;
-            default:
-                if (this._verbose) console.log('no defined routine for message of type ' + msg.type);
+
+        const type = msg.type.toLowerCase();
+        if(type === 'sdp'){
+            await this._handleSdp(msg.data);
+        }else if(type === 'ice'){
+            await this._handleRemoteIceCandidate(msg.data)
+        }else if(type === 'connection:close'){
+            await this._handleClosingConnection();
+        }else{
+            if(this._verbose) console.log('could not find handle for msg type',type,msg);
         }
+
+        // switch (msg.type) {
+        //     case "sdp":
+        //         await this._handleSdp(msg.data);
+        //         break;
+        //     case "ice":
+        //         await this._handleRemoteIceCandidate(msg.data);
+        //         break;
+        //     case "connection:close":
+        //         this._handleClosingConnection();
+        //         break;
+        //     default:
+        //         if (this._verbose) console.log('no defined routine for message of type ' + msg.type);
+        // }
     }
 
 
@@ -183,12 +195,15 @@ class Connect extends Listenable() {
                         }
                         if(tries >= maxTries){
                             clearInterval(trySettingCandidate);
-                            console.error('failed to add ice candidate, no offer on time');
+                            throw new Error('failed to add ice candidate, no offer on time');
                         }
                     }catch(err){
                         clearInterval(trySettingCandidate);
-                        // if we ignored an offer due to glare, do not throw the error, only when the error has other reasons
-                        if(!this._ignoredOffer) throw err;
+                        // only errors that are not caused by ignoring an offer due to glare are important and shall be handled. Discard otherwise.
+                        if(!this._ignoredOffer){
+                            this._connection.restartIce();
+                            console.error(err, candidate);
+                        }
                     }
                 }, 100);
         }
@@ -198,14 +213,22 @@ class Connect extends Listenable() {
         if(this._verbose) console.log('received sdp', description);
         try {
             const collision = this._connection.signalingState !== "stable" || this._offering;
+            if(collision && this._verbose) console.log("collision");
             if (this._ignoredOffer = !this._isYielding && description.type === "offer" && collision) {
-                if(this._verbose) console.log('ignored offer due to glare');
+                if(this._verbose) console.log(this._id+' for '+this._peer+' ignored offer due to glare');
                 return;
+            } else if (collision && description.type === "offer"){
+                if(this._verbose) console.log(this._id+' for '+this._peer+' handles glare by yielding');
+                await Promise.all([
+                    this._connection.setLocalDescription({type: "rollback"}),
+                    this._connection.setRemoteDescription(description)
+                ]);
+            }else{
+                await this._connection.setRemoteDescription(description);
             }
-            await this._connection.setRemoteDescription(description); // SRD rolls back as needed
             if (description.type === "offer") {
-                await this._connection.setLocalDescription();
-                if(this._connection.localDescription) this._signaller.send(JSON.stringify({type: 'sdp', receiver: this._peer, data: this._connection.localDescription, sent: timestamp()}));
+                await this._connection.setLocalDescription(await this._connection.createAnswer());
+                this._signaller.send(JSON.stringify({type: 'sdp', receiver: this._peer, data: this._connection.localDescription, sent: timestamp()}));
             }
         } catch (err) {
             console.error(err);
@@ -244,12 +267,11 @@ class Connect extends Listenable() {
             // we obviously only remove our own tracks, therefore searching 'recvonly'-transceivers makes no sense
             if (transceiver.direction === "sendrecv" || transceiver.direction === "sendonly") {
                 const tr = transceiver.sender.track;
-                console.log(tr, track, 'searchingActualTrack'+searchingActualTrack, 'searchingTrackKind'+searchingTrackKind);
                 if (tr && (searchingActualTrack && tr.id === track.id) || (searchingTrackKind && (tr.kind === track || track === '*'))) {
                     if (transceiver.direction === "sendrecv") transceiver.direction = "recvonly";
                     else transceiver.direction = "inactive";
                     // mute the given track, removing its content
-                    this._connection.removeTrack(sender);
+                    this._connection.removeTrack(transceiver.sender);
                     removed++;
                 }
             }
@@ -383,7 +405,7 @@ class Connect extends Listenable() {
      * All non-muted received tracks of the given connection
      * */
     get tracks() {
-        return this._receivedTracks.filter(track => !track.muted);
+        return this._receivedTracks;
     }
 
     /**

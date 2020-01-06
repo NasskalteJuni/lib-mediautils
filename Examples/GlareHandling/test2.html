@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Glare Test</title>
+    <script src="../../dist/bundle.min.js"></script>
+    <script src="./LocalSignalerMock.js"></script>
+    <script src="./createRandomMediaStream.js"></script>
+    <style>
+        video{
+            margin: 0;
+            padding: 0;
+            width: 320px;
+            height: 240px;
+            background-color: black;
+        }
+    </style>
+</head>
+<body>
+    <button id="start"> start </button>
+    <script>
+        const verbose = false;
+        const startButton = document.getElementById("start");
+        let stream = null;
+        const peers = {
+            a: {
+                connect: new MediaUtilities.Connect({peer: 'b', name: 'a', signaller: signaller({peer: 'b', self: 'a'}), verbose}),
+                sent: 0,
+                received: 0
+            },
+            b: {
+                connect: new MediaUtilities.Connect({peer: 'a', name: 'b', signaller: signaller({peer: 'a', self: 'b'}), verbose}),
+                sent: 0,
+                received: 0,
+            }
+        };
+        function addNewStream(peer){
+            if(peers[peer].sent >= 10){
+                peers[peer].sent = 0;
+                peers[peer].connect.removeMedia();
+            }
+            peers[peer].connect.addMedia(stream.clone());
+            peers[peer].sent++;
+        }
+        startButton.addEventListener("click", function(){
+            stream = createRandomMediaStream();
+            setInterval(() => {
+                addNewStream('a');
+            }, Math.random() * 5);
+            setInterval(() => {
+                addNewStream('b')
+            }, Math.random() * 5);
+            peers.a.connect.addEventListener('mediachanged', () => peers.a.received = peers.a.connect.streams.length);
+            peers.b.connect.addEventListener('mediachanged', () => peers.b.received = peers.b.connect.streams.length);
+        });
+    </script>
+</body>
+</html>

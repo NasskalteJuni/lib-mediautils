@@ -10,6 +10,7 @@ app.use(express.json());
 app.use(express.urlencoded({extended: true}));
 app.use(require('./session.js'));
 app.use(require('./auth.js'));
+app.get('/favicon.ico', (req, res) => res.send());
 app.get('/', (req, res) => res.render('login', {title: app.get('title')}));
 app.get('/lobby', (req, res) => req.session ? res.render('lobby', {name: req.session.user, title: app.get('title')}) : res.redirect('/'));
 app.get('/bundle.min.js', (req, res) => res.sendFile(path.resolve(__dirname,'../../dist/bundle.min.js')));
