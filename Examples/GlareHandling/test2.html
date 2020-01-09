@@ -35,7 +35,7 @@
             }
         };
         function addNewStream(peer){
-            if(peers[peer].sent >= 10){
+            if(peers[peer].sent >= 5){
                 peers[peer].sent = 0;
                 peers[peer].connect.removeMedia();
             }
@@ -46,10 +46,10 @@
             stream = createRandomMediaStream();
             setInterval(() => {
                 addNewStream('a');
-            }, Math.random() * 5);
+            }, Math.random() * 500);
             setInterval(() => {
                 addNewStream('b')
-            }, Math.random() * 5);
+            }, Math.random() * 500);
             peers.a.connect.addEventListener('mediachanged', () => peers.a.received = peers.a.connect.streams.length);
             peers.b.connect.addEventListener('mediachanged', () => peers.b.received = peers.b.connect.streams.length);
         });

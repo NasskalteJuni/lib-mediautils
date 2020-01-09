@@ -10,8 +10,8 @@
 <body>
 <button id="start">try generating glare</button>
 <script>
-    const a = new MediaUtilities.Connect({peer: 'b', name: 'a', signaller: signaller({self: 'a', peer: 'b', verbose: true})});
-    const b = new MediaUtilities.Connect({peer: 'a', name: 'b', signaller: signaller({self: 'b', peer: 'a', verbose: true})});
+    const a = new MediaUtilities.Connect({peer: 'b', name: 'a', verbose: true, signaller: signaller({self: 'a', peer: 'b'})});
+    const b = new MediaUtilities.Connect({peer: 'a', name: 'b', verbose: true, signaller: signaller({self: 'b', peer: 'a'})});
     a.addEventListener('streamadded', (stream) => {
         console.log(stream, stream.active);
         const video = document.createElement('video');

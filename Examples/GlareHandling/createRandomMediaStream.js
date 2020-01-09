@@ -1,7 +1,7 @@
 function createVideoNoiseTrack(){
     const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 480;
+    canvas.width = 640/4;
+    canvas.height = 480/4;
     const context = canvas.getContext("2d", {alpha: false});
     const noise = function(){
         const pixels = context.createImageData(canvas.width, canvas.height);

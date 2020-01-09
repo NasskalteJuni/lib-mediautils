@@ -50,10 +50,10 @@
     const name = new URLSearchParams(location.search).get('user');
     let architecture = 'mesh';
     let cam = null;
-    const verbose = true;
+    const verbose = false;
     const signaller = new WebSocket(location.origin.replace(/^http/,'ws'));
     const connections = new MediaUtilities.ConnectionManager({name, verbose, signaller});
-    const mediaserver = new MediaUtilities.Connect({peer: '@mcu', verbose, signaller, isYielding: false});
+    const mediaserver = new MediaUtilities.Connect({name, peer: '@mcu', verbose, signaller, isYielding: false});
     const videoMixer = new MediaUtilities.VideoMixer({width: 640, height: 480});
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Line(0, true), 'line');
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Grid(1, ids => [4,6,9].indexOf(ids.length)), 'grid');
@@ -83,11 +83,12 @@
             // if we already use our webcam, switch the stream to the current architecture
             if(cam){
                 if(architecture === 'mesh'){
-                    connections.addMedia(cam);
+                    connections.addMedia(cam.clone());
                     mediaserver.removeMedia();
                 }else if(architecture === 'mcu'){
-                    mediaserver.addMedia(cam);
+                    mediaserver.addMedia(cam.clone());
                     connections.removeMedia();
+                    videoMixer.streamIds().forEach(id => videoMixer.removeStream(id));
                 }
             }
             // redirect the output. mesh is mixed locally, mediaserver remotely, add mixed stream to display
@@ -101,8 +102,8 @@
     const addMediaButton = document.getElementById("addMedia");
     addMediaButton.addEventListener("click", async () => {
         cam = await navigator.mediaDevices.getUserMedia({video: {width: {exact: 640}, height: {exact: 480}}, audio: true});
-        if(architecture === 'mesh') connections.addMedia(cam);
-        else if(architecture === 'mcu') mediaserver.addMedia(cam);
+        if(architecture === 'mesh') connections.addMedia(cam.clone());
+        else if(architecture === 'mcu') mediaserver.addMedia(cam.clone());
         addMediaButton.parentNode.removeChild(addMediaButton);
         // yeah, we have to make an autoplay-video play. If not muted, autoplay isn't allowed in chrome
         if(display.paused) display.play();

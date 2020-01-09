@@ -11,7 +11,11 @@ const signaller = ({peer, self}) => {
             const i = _signalled.findIndex(s => (msg.receiver === s.self) || (msg.receiver === '*' && s.self !== msg.sender));
             if(i === -1) return console.warn('unable to send', msg);
             msg = JSON.stringify(msg);
-            _signalled[i]._listeners.forEach(cb => cb({data: msg}));
+            // wait 1 ms or anything just to get into the next js env event loop
+            const networkMockDelay = setTimeout(() => {
+                _signalled[i]._listeners.forEach(cb => cb({data: msg}));
+                clearTimeout(networkMockDelay);
+            }, 1);
         },
         addEventListener: function socketOnMessageStub(type, cb) {
             if (type.toLowerCase() !== 'message') return console.error('mock not implementing anything except message');
