@@ -6,13 +6,13 @@ class ConnectionManager extends Listenable(){
     /**
      * create a new peer connection manager who handles everything related to transmitting media via RTCPeerConnections
      * */
-    constructor({name = null, signaller = null, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = undefined} = {}){
+    constructor({name = null, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = undefined} = {}){
         super();
-        this._signaller = signaller || new WebSocket(location.origin.replace(/^http/,'ws'));
+        this._signaler = signaler;
         this._verbose = verbose;
         this.connections = {};
         this.localMediaStreams = [];
-        this._signaller.addEventListener('message', e => {
+        this._signaler.addEventListener('message', e => {
             let msg;
             try{
                 msg = JSON.parse(e.data);
@@ -23,7 +23,7 @@ class ConnectionManager extends Listenable(){
             switch(msg.type){
                 case "user:connected":
                     if(this._verbose) console.log('new user connected', msg.data);
-                    this.connections[msg.data] = new Connect({peer: msg.data, name, iceServers, signaller: this._signaller, useUnifiedPlan, isYielding, verbose});
+                    this.connections[msg.data] = new Connect({peer: msg.data, name, iceServers, signaler: this._signaler, useUnifiedPlan, isYielding, verbose});
                     this.dispatchEvent('userconnected', [msg.data]);
                     this._forwardEvents(this.connections[msg.data]);
                     this.localMediaStreams.forEach(stream => this.connections[msg.data].addMedia(stream));
@@ -36,7 +36,7 @@ class ConnectionManager extends Listenable(){
                 case "user:list":
                     if(this._verbose) console.log('list of users received', msg.data);
                     msg.data.filter(u => !this.connections[u]).forEach(u => {
-                        this.connections[u] = new Connect({peer: u, name, iceServers, signaller: this._signaller, useUnifiedPlan, isYielding, verbose});
+                        this.connections[u] = new Connect({peer: u, name, iceServers, signaler: this._signaler, useUnifiedPlan, isYielding, verbose});
                         if(this._verbose) console.log('new user (of list) connected', u);
                         this.dispatchEvent('userconnected', [msg.data]);
                         this._forwardEvents(this.connections[u]);
@@ -110,7 +110,7 @@ class ConnectionManager extends Listenable(){
     }
 
     close(){
-        this._signaller.close();
+        this._signaler.close();
         Object.values(this.connections).forEach(con => con.close());
     }
 
