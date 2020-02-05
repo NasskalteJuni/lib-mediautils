@@ -1,5 +1,5 @@
 const Listenable = require('./Listenable.js');
-const Connect = require('./ConnectWithSignaledLock.js');
+const Connect = require('./ConnectionWithRollback.js');
 
 class ConnectionManager extends Listenable(){
 

@@ -4,8 +4,6 @@ class AudioMixer{
         this._context = new AudioContext();
         this._out = this._context.createMediaStreamDestination();
         this._in = {};
-        const analyzer = this._context.createAnalyser();
-        analyzer.maxDecibels
     }
 
     get out(){

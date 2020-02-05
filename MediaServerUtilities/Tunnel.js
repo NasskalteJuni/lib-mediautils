@@ -3,7 +3,7 @@
  * A class that tunnels between the browser environment node module and its inside
  * Only intended to be used together with BrowserEnvironment, therefore private
  * */
-class _Tunnel{
+class tunnel{
 
     /**
      * Creates a new, but still closed tunnel instance
@@ -73,4 +73,4 @@ class _Tunnel{
 
 }
 
-module.exports = _Tunnel;
+module.exports = tunnel;

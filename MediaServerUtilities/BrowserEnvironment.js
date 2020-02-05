@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const read = require('fs').readFileSync;
-const Tunnel = require('./_Tunnel.js');
+const Tunnel = require('./Tunnel.js');
 const Listenable = require('./Listenable.js');
 let executablePath = 'C:\\Users\\lukas\\AppData\\Local\\Google\\Chrome SxS\\Application\\chrome.exe';
 
@@ -52,15 +52,12 @@ class BrowserEnvironment extends Listenable(){
             const handleScript = script => this._instance.addScriptTag(typeof script === "string" ? {path: script.startsWith("http") ? script : require.resolve(script)} : script);
             /*
             * 1. open a tunnel to communicate between inside the browser context and outside (here, in the node module)
-            * 1. insert the media utils
             * 2. set the globals
             * 3. add custom scripts either in given order or any order, according to config.ignoreScriptOrder
             * 4. set the page template, if defined
             */
             this.Tunnel = new Tunnel(this);
             await this.Tunnel.open();
-            await handleScript(require.resolve('./_TunnelSocketWrapper.js'));
-            await handleScript(require.resolve('../dist/bundle.min.js'));
             await Promise.all(Object.keys(this._globals).map(globalName => {
                 this._instance.evaluate((globalName, globalValue) => window[globalName] = globalValue, [globalName, this._globals[globalName]])
             }));

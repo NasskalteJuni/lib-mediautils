@@ -4,7 +4,7 @@ const commonjs = require('rollup-plugin-commonjs');
 module.exports = {
     input: './MediaServerUtilities/index.js',
     output: {
-        file: './dist/bundle.min.js',
+        file: './dist/mediautils.js',
         format: 'iife',
         name: 'MediaUtilities',
         globals: 'MediaUtilities',
