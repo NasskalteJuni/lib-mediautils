@@ -34,11 +34,11 @@ class Connection extends Listenable() {
         this._verbose = verbose;
         this._isYielding = isYielding === undefined ? (this._name ? this._name.localeCompare(this._peer) > 0 : false) : isYielding;
         this._offering = false;
-        this._setupPeerConnection();
         this._receivedStreams = [];
         this._receivedTracks = [];
         this._addedTracks = [];
         this._logger = logger;
+        this._setupPeerConnection();
     }
 
     /**

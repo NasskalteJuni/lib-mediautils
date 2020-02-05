@@ -36,11 +36,11 @@ class Connection extends Listenable() {
         this._locked = false;
         this._queued = false;
         this._queuedMedia = [];
-        this._setupPeerConnection();
         this._receivedStreams = [];
         this._receivedTracks = [];
         this._addedTracks = [];
         this._logger = logger;
+        this._setupPeerConnection();
     }
 
     /**
