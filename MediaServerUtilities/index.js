@@ -6,7 +6,7 @@ const SpeechDetection = require('./SpeechDetection.js');
 const Transcriber = require('./Transcriber.js');
 const VideoMixingConfiguration = require('./VideoMixingConfiguration.js');
 const Signaler = require('./Signaler.js');
-
+const wrapTunnelAsSignaler = require('./TunnelSignaler.js');
 
 const Grid = require('./VideoMixingConfigurations/Grid.js');
 const Middle = require('./VideoMixingConfigurations/Middle.js');
@@ -25,5 +25,6 @@ module.exports = {
         Grid,
         Middle,
         Line
-    }
+    },
+    wrapTunnelAsSignaler
 };

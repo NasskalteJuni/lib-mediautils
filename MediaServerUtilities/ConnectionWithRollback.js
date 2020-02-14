@@ -1,5 +1,4 @@
 const Listenable = require('./Listenable.js');
-const log = require('loglevel');
 const ID = () => new Date().getTime().toString(32) + Math.random().toString(32).substr(2,7);
 const timestamp = () => new Date().toISOString();
 
@@ -23,7 +22,7 @@ class Connection extends Listenable() {
      * @param config.verbose [boolean=false] set to true to log the steps in the signalling and media handling process
      * @param config.logger [Logger=loglevel] a logger to be used. Can be the widely used console object, defaults to an instance of the loglevel library
      * */
-    constructor({id = ID(), peer = null, name = null, signaler, iceServers = [], useUnifiedPlan = true, isYielding = undefined, verbose = false, logger=log} = {}) {
+    constructor({id = ID(), peer = null, name = null, signaler, iceServers = [], useUnifiedPlan = true, isYielding = undefined, verbose = false, logger=console} = {}) {
         super();
         this._signaler = signaler;
         this._connectionConfig = {iceServers, sdpSemantics: useUnifiedPlan ? 'unified-plan' : 'plan-b'};
@@ -78,7 +77,7 @@ class Connection extends Listenable() {
     _setupPeerConnection() {
         this._connection = new RTCPeerConnection(this._connectionConfig);
         this._connection.addEventListener('icecandidate', e => this._forwardIceCandidate(e.candidate));
-        this.addEventListener('negotiationneeded', () => this._startHandshake());
+        this._connection.addEventListener('negotiationneeded', () => this._startHandshake());
         this._connection.addEventListener('iceconnectionstatechange', () => this._handleIceChange());
         this._connection.addEventListener('track', ({track, streams}) => this._handleIncomingTrack(track, streams));
         if (this._verbose) this._logger.log('created new peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
@@ -155,6 +154,7 @@ class Connection extends Listenable() {
      * */
     async _startHandshake(){
         try{
+            if(this._verbose) this._logger.log('negotiation is needed');
             this._offering = true;
             const offer = await this._connection.createOffer();
             if(this._connection.signalingState !== "stable") return;

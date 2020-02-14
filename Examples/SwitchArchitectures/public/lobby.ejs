@@ -6,7 +6,7 @@
     <title><%=title%></title>
     <link href="style.css" rel="stylesheet" type="text/css">
     <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/webrtc-adapter/7.3.0/adapter.min.js"></script>-->
-    <script src="bundle.min.js"></script>
+    <script src="mediautils.js"></script>
     <style>
         #display{
             width: 640px;
@@ -41,7 +41,7 @@
         button.innerText = 'change architecture (currently '+architecture+')';
         button.addEventListener('click', () => {
             const switchToArchitecture = architecture === 'mesh' ? 'mcu' : 'mesh';
-            signaller.send(JSON.stringify({type: 'architecture:change', receiver: '@server', data: switchToArchitecture, sent: new Date().toISOString()}));
+            signaler.send({type: 'architecture:change', receiver: '@server', data: switchToArchitecture, sent: new Date().toISOString()});
         });
         document.querySelector('main').appendChild(button);
     }
@@ -50,10 +50,10 @@
     const name = new URLSearchParams(location.search).get('user');
     let architecture = 'mesh';
     let cam = null;
-    const verbose = false;
-    const signaller = new WebSocket(location.origin.replace(/^http/,'ws'));
-    const connections = new MediaUtilities.ConnectionManager({name, verbose, signaller});
-    const mediaserver = new MediaUtilities.Connect({name, peer: '@mcu', verbose, signaller, isYielding: false});
+    const verbose = true;
+    const signaler = new MediaUtilities.Signaler({endpoint: location.origin.replace(/^http/,'ws')});
+    const connections = new MediaUtilities.ConnectionManager({name, verbose, signaler});
+    const mediaserver = new MediaUtilities.Connection({name, peer: '@mcu', verbose, signaler, isYielding: false});
     const videoMixer = new MediaUtilities.VideoMixer({width: 640, height: 480});
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Line(0, true), 'line');
     videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Grid(1, ids => [4,6,9].indexOf(ids.length)), 'grid');
@@ -72,8 +72,8 @@
         videoMixer.removeStream(peer+'-'+stream.id);
         audioMixer.removeStream(peer+'-'+stream.id);
     })
-    signaller.addEventListener('message', e => {
-        const msg = JSON.parse(e.data);
+    signaler.addEventListener('message', e => {
+        const msg = e.data;
         if(msg.type === 'architecture:change'){
             console.log('received architecture update:', msg.data);
             // if we have for some reason the current architecture, do nothing

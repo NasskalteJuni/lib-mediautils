@@ -13,7 +13,7 @@ app.use(require('./auth.js'));
 app.get('/favicon.ico', (req, res) => res.send());
 app.get('/', (req, res) => res.render('login', {title: app.get('title')}));
 app.get('/lobby', (req, res) => req.session ? res.render('lobby', {name: req.session.user, title: app.get('title')}) : res.redirect('/'));
-app.get('/bundle.min.js', (req, res) => res.sendFile(path.resolve(__dirname,'../../dist/bundle.min.js')));
+app.get('/mediautils.js', (req, res) => res.sendFile(path.resolve(__dirname,'../../dist/mediautils.js')));
 app.use((err, req, res, next) => { console.error(err.stack); res.render('error', {error: err.message}); });
 app.use((req, res) => res.status(404).render('404',{title: app.get('title')}));
 

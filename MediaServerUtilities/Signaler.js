@@ -1,3 +1,5 @@
+const Listenable = require('./Listenable.js');
+
 /**
  * implements a simple, websocket-based Signaler,
  * which can be also used as a reference or interface for other signalling solutions (like Server-Sent-Event-based or HTTP-Push)
@@ -5,16 +7,19 @@
  * by calling addEventListener('message', function callback({type="message", data}){...}) and a 'close' EventListener by calling
  * addEventListener('close', function callback(){...})
  * */
-module.exports = class Signaler{
+module.exports = class Signaler extends Listenable(){
 
     /**
      * construct a new signaller
      * @param endpoint [string] URL or connection string to connect the signaler client to the server
     * */
     constructor({endpoint} = {}){
-        this._connection = new WebSocket(endpoint);
+        super();
+        this._connection = new WebSocket(arguments.length && typeof arguments[0] === "string" ? arguments[0] : endpoint);
         this._queued = [];
         this._connection.addEventListener('open', () => this._queued.forEach(msg => this._connection.send(msg)));
+        this._connection.addEventListener('message', e => this.dispatchEvent('message', [{type: 'message', data: JSON.parse(e.data)}]));
+        this._connection.addEventListener('close', () => this.dispatchEvent('close', []))
     }
 
     /**
@@ -28,21 +33,10 @@ module.exports = class Signaler{
     }
 
     /**
-     * add event listeners to react to changes
-     * @param type [string]
-     * @param callback [function]
+     * closes the connection
      * */
-    addEventListener(type, callback){
-        this._connection.addEventListener(type, callback);
-    }
-
-    /**
-     * remove added event listeners
-     * @param type [string]
-     * @param callback [function]
-     * */
-    removeEventListener(type, callback){
-        this._connection.removeEventListener(type, callback);
+    close(){
+        return this._connection.close();
     }
 
     /**

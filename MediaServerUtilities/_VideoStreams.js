@@ -12,14 +12,16 @@ module.exports = (superclass=Object) => class C extends superclass{
 
     /**
      * adds a MediaStream to the managed streams
-     * @param stream the MediaStream object to manage
-     * @param id the unique identifier used for the mediaStream (useful for removal, custom grids, etc.).
+     * @param m the MediaStream object to manage
+     * @param id the unique identifier used for the mediaStream (useful for removal, custom grids, etc.). Defaults to the media stream id
      * */
-    addStream(stream, id){
+    addStream(m, id){
+        if(arguments.length === 1) id = m.id;
+        if(m instanceof MediaStreamTrack) m = new MediaStream([m]);
         const helper = document.createElement('video');
         helper.autoplay = true;
         helper.muted = true;
-        helper.srcObject = stream;
+        helper.srcObject = m;
         helper.style.visibility = "hidden";
         helper.style.pointerEvents = "none";
         helper.style.position = "absolute";
@@ -31,11 +33,11 @@ module.exports = (superclass=Object) => class C extends superclass{
 
     /**
      * removes a MediaStream from the mixing process
-     * @param id the id used to add the media stream
+     * @param id [string|MediaStream|MediaStreamTrack] the id used to add the media stream. If the media stream was added without id, you have to pass in the stream or track that was added
      * @throws Error when there is no stream with the given id
      * */
     removeStream(id){
-        if(!this._streams[id]) throw new Error('No stream with id ' + id);
+        if(id instanceof MediaStream || id instanceof MediaStreamTrack) id = id.id;
         delete this._streams[id];
         this._onStreamChangeHandler(this.streamIds());
     }

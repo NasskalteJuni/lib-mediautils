@@ -39,7 +39,12 @@ module.exports = server => server.on('upgrade', (req, sock, body) => {
             ws.send(JSON.stringify({type: 'user:list', sender: '@server', data: Object.keys(sockets).filter(u => u !== user), receiver: user, sent: timestamp(), transmitted: timestamp()}));
 
             ws.on('message', function(event) {
-                const msg = JSON.parse(event.data);
+                let msg = JSON.parse(event.data);
+                msg = JSON.parse(msg);
+                if(typeof msg === "undefined" || typeof msg.type === "undefined"){
+                    console.error(typeof msg, msg);
+                    console.error(msg.type);
+                }
                 // only the server is allowed to issue user-typed messages
                 // if clients were to be able to do this, they could maliciously send disconnects or do other harm
                 if(msg.type.toString().startsWith('user:')){

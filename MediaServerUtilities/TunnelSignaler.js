@@ -1,4 +1,4 @@
-const signaller = {
+module.exports = Tunnel => ({
     send: msg => {
         Tunnel.doExport('message', msg);
     },
@@ -9,4 +9,4 @@ const signaller = {
             cb(e);
         })
     }
-};
+});

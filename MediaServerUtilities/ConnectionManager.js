@@ -1,44 +1,39 @@
 const Listenable = require('./Listenable.js');
-const Connect = require('./ConnectionWithRollback.js');
+const Connection = require('./ConnectionWithRollback.js');
 
 class ConnectionManager extends Listenable(){
 
     /**
      * create a new peer connection manager who handles everything related to transmitting media via RTCPeerConnections
      * */
-    constructor({name = null, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, isYielding = undefined} = {}){
+    constructor({name = null, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, logger = console, isYielding = undefined} = {}){
         super();
         this._signaler = signaler;
         this._verbose = verbose;
+        this._logger = logger;
         this.connections = {};
         this.localMediaStreams = [];
         this._signaler.addEventListener('message', e => {
-            let msg;
-            try{
-                msg = JSON.parse(e.data);
-            }catch(err){
-                console.error('erroneous message', e.data, e);
-                throw err;
-            }
+            let msg = e.data;
             switch(msg.type){
                 case "user:connected":
-                    if(this._verbose) console.log('new user connected', msg.data);
-                    this.connections[msg.data] = new Connect({peer: msg.data, name, iceServers, signaler: this._signaler, useUnifiedPlan, isYielding, verbose});
+                    if(this._verbose) this._logger.log('new user connected', msg.data);
+                    this.connections[msg.data] = new Connection({peer: msg.data, name, iceServers, signaler: this._signaler, useUnifiedPlan, isYielding, verbose, logger});
                     this.dispatchEvent('userconnected', [msg.data]);
                     this._forwardEvents(this.connections[msg.data]);
                     this.localMediaStreams.forEach(stream => this.connections[msg.data].addMedia(stream));
                     break;
                 case "user:disconnected":
-                    if(this._verbose) console.log('user disconnected', msg.data);
+                    if(this._verbose) this._logger.log('user disconnected', msg.data);
                     delete this.connections[msg.data];
                     this.dispatchEvent('userdisconnected', [msg.data]);
                     break;
                 case "user:list":
-                    if(this._verbose) console.log('list of users received', msg.data);
+                    if(this._verbose) this._logger.log('list of users received', msg.data);
                     msg.data.filter(u => !this.connections[u]).forEach(u => {
-                        this.connections[u] = new Connect({peer: u, name, iceServers, signaler: this._signaler, useUnifiedPlan, isYielding, verbose});
-                        if(this._verbose) console.log('new user (of list) connected', u);
-                        this.dispatchEvent('userconnected', [msg.data]);
+                        this.connections[u] = new Connection({peer: u, name, iceServers, signaler: this._signaler, useUnifiedPlan, isYielding, verbose});
+                        if(this._verbose) this._logger.log('new user (of list) connected', u);
+                        this.dispatchEvent('userconnected', [u]);
                         this._forwardEvents(this.connections[u]);
                         this.localMediaStreams.forEach(stream => this.connections[u].addMedia(stream));
                     });
@@ -86,11 +81,11 @@ class ConnectionManager extends Listenable(){
      * */
     addMedia(media){
         if(media instanceof MediaStream){
-            if(this._verbose) console.log('added media stream');
+            if(this._verbose) this._logger.log('added media stream');
             this.localMediaStreams.push(media);
             Object.values(this.connections).forEach(con => con.addMedia(media));
         }else{
-            if(this._verbose) console.log('added media stream track');
+            if(this._verbose) this._logger.log('added media stream track');
             const stream = new MediaStream([media]);
             this.localMediaStreams.push(stream);
             Object.values(this.connections).forEach(con => con.addMedia(media));
@@ -99,11 +94,11 @@ class ConnectionManager extends Listenable(){
 
     removeMedia(){
         if(arguments.length === 0){
-            if(this._verbose) console.log('removed all media');
+            if(this._verbose) this._logger.log('removed all media');
             this.localMediaStreams = [];
             Object.values(this.connections).forEach(con => con.removeMedia());
         }else{
-            if(this._verbose) console.log('remove single media stream');
+            if(this._verbose) this._logger.log('remove single media stream');
             this.localMediaStreams = this.localMediaStreams.filter(s => s.id !== arguments[0].id);
             Object.values(this.connections).forEach(con => con.removeMedia(arguments[0]));
         }

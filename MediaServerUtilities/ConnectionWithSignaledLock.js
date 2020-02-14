@@ -1,5 +1,4 @@
 const Listenable = require('./Listenable.js');
-const log = require('loglevel');
 const ID = () => new Date().getTime().toString(32) + Math.random().toString(32).substr(2,7);
 const timestamp = () => new Date().toISOString();
 
@@ -23,7 +22,7 @@ class Connection extends Listenable() {
      * @param config.verbose [boolean=false] set to true to log the steps in the signaling and media handling process
      * @param config.logger [Logger=loglevel] a logger to be used. Can be the widely used console object, defaults to an instance of the loglevel library
      * */
-    constructor({id = ID(), peer = null, name = null, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, isYielding = undefined, verbose = false, logger=log} = {}) {
+    constructor({id = ID(), peer = null, name = null, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, isYielding = undefined, verbose = false, logger=console} = {}) {
         super();
         this._signaler = signaler;
         this._connectionConfig = {iceServers, sdpSemantics: useUnifiedPlan ? 'unified-plan' : 'plan-b'};
