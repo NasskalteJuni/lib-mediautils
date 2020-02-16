@@ -29,6 +29,7 @@ class VideoMixer extends Videos(Configurations()){
         // (a forceful configuration change, for example)
         // precalculate the positions
         this.onConfigChange(this._precalculatePositionsAndMatchStreams);
+        this._snapshot = null;
     }
 
     /**
@@ -148,6 +149,13 @@ class VideoMixer extends Videos(Configurations()){
     }
 
     /**
+     * debug function. allows you to see the calculated values and used configs
+     * */
+    snapshot(fn){
+        this._snapshot = fn;
+    }
+
+    /**
      * @private
      * draw the current streams on according to the current config in use on a canvas
      * */
@@ -158,13 +166,29 @@ class VideoMixer extends Videos(Configurations()){
             // let the custom paint function handle it
             this.currentConfig.paint(ids, this._canvas, this._context);
         }else{
+            const snapshot = {background: null, mixed: []};
             this._context.clearRect(0,0,this._width,this._height);
+            const background = this.currentConfig.background()(ids);
+            this._context.fillStyle = background;
+            snapshot.background = background;
+            this._context.fillRect(0,0,this._width, this._height);
             // check if you have to resolve position functions
             const resolveFn = (v, s) => typeof v === "function" ? v(s) : v;
-            this.currentConfig.calculatedPositions.forEach((pos) => {
+            this.currentConfig.calculatedPositions.forEach((pos, drawIndex) => {
                 const stats = {width: this.width, height: this.height, id: pos.assignedId};
-                if(pos.source) this._context.drawImage(pos.source, resolveFn(pos.x, stats), resolveFn(pos.y, stats), resolveFn(pos.width, stats), resolveFn(pos.height, stats));
+                if(pos.source){
+                    const x = resolveFn(pos.x, stats);
+                    const y = resolveFn(pos.y, stats);
+                    const width = resolveFn(pos.width, stats);
+                    const height = resolveFn(pos.height, stats);
+                    this._context.drawImage(pos.source, x, y, width, height);
+                    snapshot.mixed.push({id: pos.assignedId, drawIndex, x, y, width, height});
+                }
             });
+            if(this._snapshot){
+                this._snapshot(snapshot);
+                this._snapshot = null;
+            }
         }
     }
 

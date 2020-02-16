@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Video Mixing</title>
     <!-- point this to the script, if the project was cloned from git, it should work already -->
-    <script src="../../dist/bundle.min.js"></script>
+    <script src="../../dist/mediautils.min.js"></script>
     <style>
         #container{
             position: relative;
@@ -40,18 +40,19 @@
         const display = document.getElementById("display");
         const fps = 15;
         // create a speechDetection (bind to window for easier inspection)
-        window.speechDetection = new MediaUtilities.SpeechDetection();
+        window.speechDetection = new MediaUtilities.SpeechDetection({threshold: -60});
         const idIsNowSpeaking = id => speechDetection.speakers.indexOf(id) >= 0 || speechDetection.speakers.length === 0;
         // make a config, were the current speaker (or last speaker) is shown
         // and which shows him bigger, when he is currently speaking
         const currentSpeakerOnly = new MediaUtilities.VideoMixingConfiguration({
             priority: 0,
             applicable: true,
+            background: () => speechDetection.silence ? 'rgb(0,0,0)' : 'rgb(100,200,250)',
             positions: {
-                x: s => speechDetection.silence ? 10 : 0,
-                y: s => speechDetection.silence ? 10 : 0,
-                width: s=> idIsNowSpeaking(s.id) ? (speechDetection.silence ? s.width - 20 : s.width) : 0,
-                height: s => idIsNowSpeaking(s.id) ? (speechDetection.silence ? s.height - 20 : s.height) : 0
+                x: s => speechDetection.silence ? 2 : 5,
+                y: s => speechDetection.silence ? 2 : 5,
+                width: s=> idIsNowSpeaking(s.id) ? (speechDetection.silence ? s.width - 4 : s.width - 10) : 0,
+                height: s => idIsNowSpeaking(s.id) ? (speechDetection.silence ? s.height - 4 : s.height - 10) : 0
             }
         });
         // create a new video mixer (global for easier inspection) and pass desired options

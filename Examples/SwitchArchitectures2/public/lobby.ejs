@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%=title%></title>
+    <link href="style.css" rel="stylesheet" type="text/css">
+    <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/webrtc-adapter/7.3.0/adapter.min.js"></script>-->
+    <script src="mediautils.js"></script>
+    <style>
+        #display{
+            width: 640px;
+            height: 480px;
+            background-color: black;
+        }
+    </style>
+</head>
+<body>
+<aside id="users">
+</aside>
+<main>
+    <video id="display" autoplay></video>
+    <button id="addMedia">Join Conference</button>
+</main>
+<script>
+    function updateUserList(users){
+        const container = document.getElementById("users");
+        container.innerHTML = "";
+        const ul = document.createElement("ul");
+        users.forEach(u => {
+            const li = document.createElement("li");
+            li.innerText = u;
+            ul.appendChild(li);
+        })
+        container.appendChild(ul);
+    }
+
+    function addSwitchButton(){
+        const button = document.createElement('button');
+        button.id = 'changearchitecture';
+        button.innerText = 'change architecture (currently '+conference.architecture+')';
+        button.addEventListener('click', () => {
+            const switchToArchitecture = architecture === 'mesh' ? 'mcu' : 'mesh';
+            signaler.send({type: 'architecture:change', receiver: '@server', data: switchToArchitecture, sent: new Date().toISOString()});
+        });
+        document.querySelector('main').appendChild(button);
+    }
+</script>
+<script>
+    const name = new URLSearchParams(location.search).get('user');
+    let architecture = 'mesh';
+    let cam = null;
+    const verbose = true;
+    const signaler = new MediaUtilities.Signaler({endpoint: location.origin.replace(/^http/,'ws')});
+    const conference = new MediaUtilities.Conference({signaler, verbose});
+    const addMediaButton = document.getElementById("addMedia");
+    conference.addEventListener('userconnected', () => updateUserList(connections.users))
+    conference.addEventListener('userdisconnected', () => updateUserList(connections.users));
+    conference.addEventListener('architectureswitched', architecture => {
+        const b = document.getElementById('changearchitecture');
+        if(b) b.innerText = 'change architecture (currently '+architecture+')';
+    });
+    addMediaButton.addEventListener("click", async () => {
+        cam = conference.addWebcam({video: {width: {exact: 640}, height: {exact: 480}}, audio: true});
+        addMediaButton.parentNode.removeChild(addMediaButton);
+        // yeah, we have to make an autoplay-video play. If not muted, autoplay isn't allowed in chrome
+        if(display.paused) display.play();
+        addSwitchButton();
+    });
+    window.addEventListener('beforeunload', () => connections.close());
+</script>
+</body>
+</html>

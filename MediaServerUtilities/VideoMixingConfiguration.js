@@ -36,13 +36,13 @@ class VideoMixingConfiguration {
     }
 
     /**
-     * @return string
+     * @return function
      * */
-    background(ids){
+    background(){
         if(typeof this._background === "function"){
-            return this._background(ids);
-        }else{
             return this._background;
+        }else{
+            return () => this._background;
         }
     }
 
