@@ -5,12 +5,15 @@
     <title>Test</title>
 </head>
 <body>
-<header>
-    <a href="/login.html">zum login</a>
-    <a href="/register.html">registrieren</a>
-</header>
 <main>
-
+    <form name="login" method="GET" action="room.html">
+        <input type="text" name="name" placeholder="Your name" autocomplete="off" spellcheck="false" required>
+        <button type="submit" id="enter">Enter</button>
+    </form>
 </main>
+<script>
+    const loginForm = document.forms.login;
+    const error = document.getElementById("error");
+</script>
 </body>
 </html>

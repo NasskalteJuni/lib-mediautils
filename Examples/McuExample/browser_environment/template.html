@@ -7,39 +7,45 @@
 <body>
     <script>
         /* global MediaUtilities */
-        window.connections = new MediaUtilities.ConnectionManager();
-        window.videoMixer = new MediaUtilities.VideoMixer();
-        window.audioMixers = {};
-        connections.onNewPeerConnection(function(userId, peerConnection){
-            window.audioMixers[userId] = new MediaUtilities.AudioMixer();
-            peerConnection.addTransceiver(videoMixer.outputTrack, {direction: 'sendonly', streams: [videoMixer.out]});
-            peerConnection.addTransceiver(audioMixers[userId].outputTrack, {direction: 'sendonly', streams: [audioMixer.out]});
+        const signaler = MediaUtilities.wrapTunnelAsSignaler(Tunnel);
+        signaler.addEventListener('message', e => console.log(e.data));
+        window.connections = new MediaUtilities.ConnectionManager({name: '@mcu', signaler, isYielding: true, verbose: true});
+        window.speechDetection = new MediaUtilities.SpeechDetection({threshold: -65, requiredSamplesForSpeech: 8, samplingInterval: 25});
+        speechDetection.addEventListener('speechchange', speakers => {
+            signaler.send({type:'speech:change', data: speakers, receiver: '*'})
         });
-        connections.onTrackHandle(function(userId, track, streams){
+        window.videoMixer = new MediaUtilities.VideoMixer({fps: 30, width: 640, height: 480});
+        videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Speaker(speechDetection));
+        window.audioMixers = {};
+        connections.addEventListener('userconnected', user => {
+            window.audioMixers[user] = new MediaUtilities.AudioMixer();
+            connections.get(user).addMedia(new MediaStream([videoMixer.outputTrack, audioMixers[user].outputTrack]));
+        });
+        connections.addEventListener('userdisconnected', user => {
+            delete window.audioMixer[user];
+            videoMixer.removeStream(user);
+            speechDetection.removeStream(user);
+        });
+        connections.addEventListener('trackadded', (track, user) => {
             if(track.kind === "video"){
-                const stream = streams && streams.length ? streams[0] : new MediaStream([track]);
-                videoMixer.addStream(stream, userId);
+                videoMixer.addStream(track, user);
             }
             if(track.kind === "audio"){
-                const stream = streams && streams.length ? streams[0] : new MediaStream([track]);
-                audioMixers[userId].addStream(stream, userId);
+                speechDetection.addStream(track, user);
+                Object.keys(audioMixers).forEach(u => {
+                    if(user !== u) audioMixers[u].addStream(track, user);
+                });
             }
         });
-        connections.onDisconnect(function(userId){
-            videoMixer.removeStream(userId);
-        });
-        Tunnel.onImport(user, async ({type, data}) => {
-            switch (type) {
-                case "ice":
-                    await connections.addIceCandidate(user, data);
-                    break;
-                case "offer":
-                    const answer = await connections.handleOffer(user, data);
-                    Tunnel.doExport(user, {type: 'answer', content: answer});
-                    break;
-                case "answer":
-                    await connections.handleAnswer(user, data);
-                    break;
+        connections.addEventListener('trackremoved', (track, user) => {
+            if(track.kind === "video"){
+                videoMixer.removeStream(track, user);
+            }
+            if(track.kind === "audio"){
+                speechDetection.removeStream(track, user);
+                Object.keys(audioMixers).forEach(u => {
+                    if(user !== u) audioMixers[u].removeStream(track, user);
+                });
             }
         });
     </script>

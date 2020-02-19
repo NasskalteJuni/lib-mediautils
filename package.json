@@ -6,6 +6,7 @@
   "scripts": {
     "build": "rollup -c --config",
     "build:min": "rollup -c --config rollup.min.config.js",
+    "build:all": "npm run build && npm run build:min",
     "dev": "rollup -c -w -m --config",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

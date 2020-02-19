@@ -22,7 +22,7 @@ class AudioMixer{
     }
 
     removeStream(id){
-        if(id instanceof MediaStream || id instanceof MediaStreamTrack) id = id.id;
+        if(arguments[0] instanceof MediaStream || arguments[0] instanceof MediaStreamTrack) id = arguments[0].id;
         delete this._in[id];
         this._rebuildGraph();
     }

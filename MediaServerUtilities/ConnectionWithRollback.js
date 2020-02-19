@@ -29,7 +29,7 @@ class Connection extends Listenable() {
         this._id = id;
         this._peer = peer;
         this._name = name || this._id;
-        this._signaler.addEventListener('message', e => this._handleSignallingMessage(e.data));
+        this._signaler.addEventListener('message', msg => this._handleSignallingMessage(msg));
         this._verbose = verbose;
         this._isYielding = isYielding === undefined ? (this._name ? this._name.localeCompare(this._peer) > 0 : false) : isYielding;
         this._offering = false;
@@ -90,6 +90,13 @@ class Connection extends Listenable() {
      * */
     _handleIncomingTrack(track, streams) {
         const newStreams = [];
+        // handle chrome bug 835767 (remote audio not working with web audio api if not instantiated as element)
+        if(track.kind === "audio"){
+            const bugfix = document.createElement('audio');
+            bugfix.muted = true;
+            bugfix.autoplay = true;
+            bugfix.srcObject = new MediaStream([track]);
+        }
         this.dispatchEvent('trackadded', [track]);
         streams.forEach(stream => {
             if (this._receivedStreams.findIndex(s => s.id === stream.id) === -1) {

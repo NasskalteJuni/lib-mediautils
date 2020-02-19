@@ -1,32 +1,33 @@
-class SpeechDetection{
+const Listenable = require('./Listenable.js');
+
+class SpeechDetection extends Listenable(){
 
     /**
      * creates a speech (or noise) detector,
-     * which checks which given Streams are currently loud enough for typical human speech
-     * (most parts of this were directly taken or inspired by hark.js https://github.com/latentflip/hark/)
+     * which checks which given media streams or tracks are currently loud enough for typical human speech
+     * (key parts were directly taken from or inspired by hark.js https://github.com/latentflip/hark/)
      * @param config [object]
-     * @param config.treshold [number=-70] a dBFS measure. Positive numbers will be made negative
+     * @param config.threshold [number=-70] a dBFS measure. Positive numbers will be made negative
      * @param config.samplingInterval [number=100] milliseconds between samples. Higher sample rate equals earlier detection but also more cpu cost
      * @param config.smoothingConstant [number=0.1] smoothes input to avoid peaks, set values with caution
-     * @param config.requiredSamplesForSpeech [number=5] on how many consecutive samples must be a dBFS value over treshold to be considered speech
-     * @param config.debug [boolean=false] logging on events if true
+     * @param config.requiredSamplesForSpeech [number=5] on how many consecutive samples must be a dBFS value over threshold to be considered speech
+     * @param config.verbose [boolean=false] logging on events if true
+     * @param config.logger [logger=console] a logger to use, defaults to browser console
      * */
-    constructor({threshold=-70, samplingInterval=100, smoothingConstant=0.1, requiredSamplesForSpeech=5, debug=false} = {}){
+    constructor({threshold=-70, samplingInterval=100, smoothingConstant=0.1, requiredSamplesForSpeech=5, verbose=false, logger=console} = {}){
+        super();
         this._smoothingConstant = 0.1;
         this._samplingInterval = 100; //ms
         this._treshold = -Math.abs(threshold);
         this.requiredSamplesForSpeech = 3;
         this._in = {};
         this._out = {};
-        this._context = new AudioContext();
-        this._onSpeechStartByStream = () => {};
-        this._onSpeechEndByStream = () => {};
-        this._onSpeechStart = () => {};
-        this._onSpeechEnd = () => {};
-        this._onSpeakerChange = () => {};
+        this._context = new AudioContext(); // careful, audio context may need user interaction to work
         this._lastSpeakers = [];
+        this._lastSpeaker = null;
         this._silence = true;
-        this._debug = debug;
+        this._verbose = verbose;
+        this._logger = logger;
         this._analyzerLoop = setInterval(() => {
             Object.keys(this._in).forEach(this._processForEachUser.bind(this));
             const currentSpeakers = Object.keys(this._out).reduce((speakers, id) => this._getStatsFor(id).speaking ? speakers.concat(id) : speakers, []).sort();
@@ -36,40 +37,50 @@ class SpeechDetection{
             const speechEnd = currentLength === 0 && lastLength > 0;
             const speechStart = currentLength > 0 && lastLength === 0;
             if(speechStart){
-                if(this._debug) console.log('speech start');
-                this._onSpeechStart(currentSpeakers);
+                if(this._verbose) this._logger.log('speech start');
+                this.dispatchEvent('speechstart', [currentSpeakers]);
                 this._silence = false;
             }
             if(speechEnd){
-                if(this._debug) console.log('speech end');
-                this._onSpeechEnd(currentSpeakers);
+                if(this._verbose) this._logger.log('speech end');
+                this.dispatchEvent('speechend', [currentSpeakers]);
                 this._silence = true;
             }
             if(change){
-                if(this._debug) console.log('speakers changed', currentSpeakers, this._lastSpeakers);
-                this._onSpeakerChange(currentSpeakers, this._lastSpeakers.slice());
+                if(this._verbose) this._logger.log('speakers changed', currentSpeakers, this._lastSpeakers);
+                this.dispatchEvent('speechchange', [currentSpeakers, this._lastSpeakers.slice()]);
+            }
+            if(currentLength > 0){
+                this._lastSpeaker = currentSpeakers[0];
             }
             this._lastSpeakers = currentSpeakers;
         }, this._samplingInterval);
     }
 
     /**
-     * @param v [number] decibel (dBFS) value set as treshold for sound, non negative values will be made negative
+     * stops the speech detection
      * */
-    set treshold(v){
-        this.treshold = -Math.abs(v);
+    stop(){
+        clearInterval(this._analyzerLoop);
     }
 
     /**
-     * the current treshold for a stream to be considered not silent
+     * @param v [number] decibel (dBFS) value set as threshold for sound, non negative values will be made negative
      * */
-    get treshold(){
-        return this.treshold;
+    set threshold(v){
+        this._threshold = -Math.abs(v);
+    }
+
+    /**
+     * the current decibel (dBFS) threshold for a stream to be considered not silent
+     * */
+    get threshold(){
+        return this._threshold;
     }
 
     /**
      * @readonly
-     * current stats by each registered stream
+     * current stats by each registered media
      * */
     get out(){
         return Object.assign({}, this._out);
@@ -77,7 +88,7 @@ class SpeechDetection{
 
     /**
      * @readonly
-     * if all registered streams are silent
+     * if all registered media is silent
      * */
     get silence(){
         return this._silence;
@@ -91,26 +102,64 @@ class SpeechDetection{
         return this._lastSpeakers
     }
 
+    /**
+     * @readonly
+     * return the last or current speaker.
+     * If currently there is silence, return the one that spoke last,
+     * if currently someone is speaking, return the first of the speaking ones
+     * */
+    get lastSpeaker(){
+        return this._lastSpeaker;
+    }
+
+    /**
+     * get the (current) deciBel values (min, max, avg) for the given id
+     * @param id [string] the media identifier used
+     * */
     _getStatsFor(id){
         if(!this._out[id]) this._out[id] = {consecutiveSamplesOverTreshold: 0, speaking: false, current: null};
         return this._out[id];
     }
 
     /**
-     * add a stream to the current detection process
-     * @param stream [MediaStream] a media stream to add (not checked, if it contains audio tracks at the current time or not)
-     * @param id an id to reference the stream and its results
+     * add media to the current detection process. you can pass in the media(stream or track) itself or its identifier
+     * @param media [MediaStream|MediaStreamTrack] a stream or track to add (stream must contain at least one audio track)
+     * @param id [string=media.id] an id to reference the media and its results
      * */
-    addStream(stream, id){
+    addStream(media, id){
+        if(arguments.length === 1) id = media.id;
+        if(media instanceof MediaStreamTrack) media = new MediaStream([media]);
         const analyzer = this._context.createAnalyser();
         analyzer.fftSize = 512;
         analyzer.smoothingTimeConstant = this._smoothingConstant;
         const fftBins = new Float32Array(analyzer.frequencyBinCount);
-        const source = this._context.createMediaStreamSource(stream);
+        const source = this._context.createMediaStreamSource(media);
         source.connect(analyzer);
-        this._in[id] = {analyzer, fftBins, source, stream};
+        this._in[id] = {analyzer, fftBins, source, stream: media};
     }
 
+    /**
+     * removes the given media. you can pass in the media (stream or track) itself or its identifier
+     * @param id [MediaStream|MediaStreamTrack|string] the media to remove
+     * */
+    removeStream(id){
+        if(arguments[0] instanceof MediaStream || arguments[0] instanceof MediaStreamTrack) id = arguments[0].id;
+        delete this._in[id];
+        delete this._out[id];
+        this._lastSpeakers = this._lastSpeakers.filter(s => s !== id);
+        if(this._lastSpeaker === id) {
+            if(this._lastSpeakers.length) this._lastSpeaker = this._lastSpeakers.indexOf(this._lastSpeaker)  >= 0 ? this._lastSpeaker : this._lastSpeakers[0];
+            else this._lastSpeaker = null;
+        }
+    }
+
+    /**
+     * @private
+     * takes an analyzer and sample buffer and retrieves the noise volume from it
+     * @param analyzer [WebAudioNode] a web audio analyzer node
+     * @param fftBins [Float32Array] a native buffer array containing the fft data of the sample at given time
+     * @returns Object a dictionary containing the minimal, maximal and average volume in the sample
+     * */
     _analyzeVolume(analyzer, fftBins){
         analyzer.getFloatFrequencyData(fftBins);
         // set max as smallest value and min as biggest value so that any other value will overwrite them
@@ -128,6 +177,11 @@ class SpeechDetection{
         return {minVolume, maxVolume, average}
     }
 
+    /**
+     * @private
+     * check for each user, if the current media sample is above the threshold and therefore seen as more than just a bit of noise
+     * @param id [string] the identifier for the given media
+     * */
     _processForEachUser(id){
         const output = this._getStatsFor(id);
         const stats = this._analyzeVolume(this._in[id].analyzer, this._in[id].fftBins);
@@ -136,67 +190,17 @@ class SpeechDetection{
             output.consecutiveSamplesOverTreshold++;
             if(output.consecutiveSamplesOverTreshold > this.requiredSamplesForSpeech){
                 output.speaking = true;
-                this._onSpeechStartByStream(id);
+                this.dispatchEvent('speechstartid', [id]);
             }
         }else{
             output.consecutiveSamplesOverTreshold = 0;
             if(output.speaking){
                 output.speaking = false;
-                this._onSpeechEndByStream(id);
+                this.dispatchEvent('speechendid', [id]);
             }
         }
     }
 
-    static _checkCb(cb){
-        if(typeof cb !== "function") throw new Error('Callback must be a function');
-    }
-
-    /**
-     * callback triggers when any stream switches from silent to speaking,
-     * the id of the stream is given to the callback function
-     * @param cb [function]
-     * */
-    onSpeechStartByStream(cb){
-        SpeechDetection._checkCb(cb);
-        this._onSpeechStartByStream = cb;
-    }
-
-    /**
-     * callback triggers when any stream switches from speaking to silent,
-     * the id of the stream is given to the callback function
-     * @param cb [function]
-     * */
-    onSpeechEndByStream(cb){
-        SpeechDetection._checkCb(cb);
-        this._onSpeechEndByStream = cb;
-    }
-
-    /**
-     * callback triggers, when no one was speaking and now one stream went from silence to speaking.
-     * The callback receives a list of ids of streams which are not silent any more
-     * @param cb [function]
-     * */
-    onSpeechStart(cb){
-        SpeechDetection._checkCb(cb);
-        this._onSpeechStart = cb;
-    }
-
-    /**
-     * callback triggers, when the last not silent stream goes silent
-     * @param cb [function]
-     * */
-    onSpeechEnd(cb){
-        SpeechDetection._checkCb(cb);
-        this._onSpeechEnd = cb;
-    }
-
-    /**
-     * callback triggers, as soon as another stream goes from silent to speaking or vice versa
-     * */
-    onSpeakerChange(cb){
-        SpeechDetection._checkCb(cb);
-        this._onSpeakerChange = cb;
-    }
 }
 
 module.exports = SpeechDetection;

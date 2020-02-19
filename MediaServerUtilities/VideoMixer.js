@@ -174,17 +174,28 @@ class VideoMixer extends Videos(Configurations()){
             this._context.fillRect(0,0,this._width, this._height);
             // check if you have to resolve position functions
             const resolveFn = (v, s) => typeof v === "function" ? v(s) : v;
-            this.currentConfig.calculatedPositions.forEach((pos, drawIndex) => {
-                const stats = {width: this.width, height: this.height, id: pos.assignedId};
-                if(pos.source){
-                    const x = resolveFn(pos.x, stats);
-                    const y = resolveFn(pos.y, stats);
-                    const width = resolveFn(pos.width, stats);
-                    const height = resolveFn(pos.height, stats);
-                    this._context.drawImage(pos.source, x, y, width, height);
-                    snapshot.mixed.push({id: pos.assignedId, drawIndex, x, y, width, height});
-                }
-            });
+            this.currentConfig.calculatedPositions
+                // sort according to z-Index
+                .sort((a , b) => {
+                    if(a.zIndex !== undefined && b.zIndex !== undefined){
+                        return (typeof a.zIndex === "function" ? a.zIndex({id: a.assignedId}) : a.zIndex) - (typeof b.zIndex === "function" ? b.zIndex({id: b.assignedId}) : b.zIndex);
+                    }
+                    else if(a.zIndex !== undefined) return 1;
+                    else return -1
+                })
+                // draw each frame
+                .forEach((pos, drawIndex) => {
+                    const stats = {width: this.width, height: this.height, id: pos.assignedId, drawIndex};
+                    if(pos.source){
+                        const x = resolveFn(pos.x, stats);
+                        const y = resolveFn(pos.y, stats);
+                        const width = resolveFn(pos.width, stats);
+                        const height = resolveFn(pos.height, stats);
+                        this._context.drawImage(pos.source, x, y, width, height);
+                        snapshot.mixed.push({id: pos.assignedId, drawIndex, x, y, width, height});
+                    }
+                });
+            // optionally take a snapshot
             if(this._snapshot){
                 this._snapshot(snapshot);
                 this._snapshot = null;

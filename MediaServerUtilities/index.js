@@ -7,6 +7,7 @@ const Transcriber = require('./Transcriber.js');
 const VideoMixingConfiguration = require('./VideoMixingConfiguration.js');
 const Signaler = require('./Signaler.js');
 const Conference = require('./Conference.js');
+const PlaceHolderMediaGenerator = require('./PlaceholderMediaGenerator.js');
 const wrapTunnelAsSignaler = require('./TunnelSignaler.js');
 
 const Grid = require('./VideoMixingConfigurations/Grid.js');
@@ -24,6 +25,7 @@ module.exports = {
     SpeechDetection,
     Conference,
     VideoMixingConfiguration,
+    PlaceHolderMediaGenerator,
     VideoMixingConfigurations: {
         Grid,
         Middle,

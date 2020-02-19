@@ -12,14 +12,16 @@ module.exports = class Signaler extends Listenable(){
     /**
      * construct a new signaller
      * @param endpoint [string] URL or connection string to connect the signaler client to the server
+     * @param WebSocket [WebSocket.prototype] the prototype to use for a new socket connection, defaults to browser-native WebSocket
     * */
-    constructor({endpoint} = {}){
+    constructor({endpoint, socket=null} = {}){
         super();
-        this._connection = new WebSocket(arguments.length && typeof arguments[0] === "string" ? arguments[0] : endpoint);
+        if(socket === null) socket = new WebSocket(arguments.length && typeof arguments[0] === "string" ? arguments[0] : endpoint);
+        this._connection = socket;
         this._queued = [];
         this._connection.addEventListener('open', () => this._queued.forEach(msg => this._connection.send(msg)));
-        this._connection.addEventListener('message', e => this.dispatchEvent('message', [{type: 'message', data: JSON.parse(e.data)}]));
-        this._connection.addEventListener('close', () => this.dispatchEvent('close', []))
+        this._connection.addEventListener('close', () => this.dispatchEvent('close', []));
+        this._connection.addEventListener('message', e => this._handleMessage(e));
     }
 
     /**
@@ -47,4 +49,20 @@ module.exports = class Signaler extends Listenable(){
         return this._connection.readyState > 1;
     }
 
-}
+
+    /**
+     * @private
+     * handles incoming socket messages and parses them accordingly
+     * @param e [Event] a message event
+     * */
+    _handleMessage(e){
+        let msg = JSON.parse(e.data);
+        if(typeof msg === "string"){
+            try{
+                msg = JSON.parse(msg);
+            }catch(err){}
+        }
+        this.dispatchEvent('message', [msg]);
+    }
+
+};

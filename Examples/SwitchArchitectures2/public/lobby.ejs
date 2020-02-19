@@ -54,8 +54,8 @@
     const signaler = new MediaUtilities.Signaler({endpoint: location.origin.replace(/^http/,'ws')});
     const conference = new MediaUtilities.Conference({signaler, verbose});
     const addMediaButton = document.getElementById("addMedia");
-    conference.addEventListener('userconnected', () => updateUserList(connections.users))
-    conference.addEventListener('userdisconnected', () => updateUserList(connections.users));
+    conference.addEventListener('userconnected', () => updateUserList(conference.members))
+    conference.addEventListener('userdisconnected', () => updateUserList(conference.members));
     conference.addEventListener('architectureswitched', architecture => {
         const b = document.getElementById('changearchitecture');
         if(b) b.innerText = 'change architecture (currently '+architecture+')';

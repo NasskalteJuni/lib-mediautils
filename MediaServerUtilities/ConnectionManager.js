@@ -13,8 +13,7 @@ class ConnectionManager extends Listenable(){
         this._logger = logger;
         this.connections = {};
         this.localMediaStreams = [];
-        this._signaler.addEventListener('message', e => {
-            let msg = e.data;
+        this._signaler.addEventListener('message', msg => {
             switch(msg.type){
                 case "user:connected":
                     if(this._verbose) this._logger.log('new user connected', msg.data);

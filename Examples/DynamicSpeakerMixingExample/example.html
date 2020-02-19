@@ -40,33 +40,33 @@
         const display = document.getElementById("display");
         const fps = 15;
         // create a speechDetection (bind to window for easier inspection)
-        window.speechDetection = new MediaUtilities.SpeechDetection({threshold: -60});
-        const idIsNowSpeaking = id => speechDetection.speakers.indexOf(id) >= 0 || speechDetection.speakers.length === 0;
-        // make a config, were the current speaker (or last speaker) is shown
-        // and which shows him bigger, when he is currently speaking
-        const currentSpeakerOnly = new MediaUtilities.VideoMixingConfiguration({
-            priority: 0,
-            applicable: true,
-            background: () => speechDetection.silence ? 'rgb(0,0,0)' : 'rgb(100,200,250)',
-            positions: {
-                x: s => speechDetection.silence ? 2 : 5,
-                y: s => speechDetection.silence ? 2 : 5,
-                width: s=> idIsNowSpeaking(s.id) ? (speechDetection.silence ? s.width - 4 : s.width - 10) : 0,
-                height: s => idIsNowSpeaking(s.id) ? (speechDetection.silence ? s.height - 4 : s.height - 10) : 0
-            }
-        });
+        window.speechDetection = new MediaUtilities.SpeechDetection({threshold: -60, smoothingConstant: 0.2, requiredSamplesForSpeech: 5});
+        speechDetection.onSpeakerChange(speakers => console.log(speakers));
+        const speaker = new MediaUtilities.VideoMixingConfigurations.Speaker(speechDetection);
         // create a new video mixer (global for easier inspection) and pass desired options
         window.mixer = new MediaUtilities.VideoMixer({fps, width: 640, height: 480});
         // add the created configuration
-        mixer.addConfig(currentSpeakerOnly, 'currentSpeakerOnly');
+        mixer.addConfig(speaker, 'currentSpeaker');
+        window.fakeWebcam = new window.MediaUtilities.PlaceHolderMediaGenerator();
         // add the streams to use. for this test, just use the webcam
         const getWebcam = navigator.mediaDevices.getUserMedia({video: true, audio: true});
         getWebcam.then(stream => {
-            id = 'webcam';
-            mixer.addStream(stream, id);
-            speechDetection.addStream(stream, id);
+            mixer.addStream(stream, 'webcam');
+            mixer.addStream(fakeWebcam.out, 'fake-webcam');
+            speechDetection.addStream(stream, 'webcam');
+            speechDetection.addStream(fakeWebcam.out, 'fake-webcam');
             display.srcObject = mixer.out;
         });
+        window.addEventListener('click', () => {
+            const noise = new window.MediaUtilities.PlaceHolderMediaGenerator({enable: true});
+            mixer.addStream(noise.videoTrack, 'noise');
+            speechDetection.addStream(noise.audioTrack,'noise');
+            const t =window.setTimeout(() => {
+                speechDetection.removeStream('noise');
+                mixer.removeStream('noise');
+                clearTimeout(t);
+            }, 3000);
+        })
         // done
     });
 </script>

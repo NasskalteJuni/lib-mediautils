@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Lobby</title>
+    <script src="/mediautils.js"></script>
+</head>
+<body>
+    <main>
+        <div id="lobby">
+            <video id="display" autoplay></video>
+            <button id="media">activate webcam</button>
+        </div>
+        <div id="list">
+
+        </div>
+    </main>
+    <script>
+        const name = new URLSearchParams(location.search).get('name');
+        const peers = [];
+        const signaler = new MediaUtilities.Signaler({endpoint: window.origin.replace(/^http/,'ws') + '?name='+ name});
+        const mcu = new MediaUtilities.Connection({id: name, name, peer: '@mcu', isYielding: false, signaler, verbose: true, logger: console});
+        mcu.addEventListener('streamadded', stream => document.getElementById("display").srcObject = stream);
+        const updateUserList = () => document.getElementById("list").innerText = peers.join(',');
+        document.getElementById("media").addEventListener("click", e => {
+            mcu.addMedia({video: true, audio: true});
+            e.target.parentNode.removeChild(e.target);
+        });
+        signaler.addEventListener("message", msg => {
+            msg = typeof msg === "string" ? JSON.parse(msg) : msg;
+            console.log(msg);
+            if(msg.type === "user:list"){
+                peers.splice(0, peers.length, msg.data);
+                updateUserList()
+            }else if(msg.type === "user:connected"){
+                peers.push(msg.data);
+                updateUserList();
+            }else if(msg.type === "user:disconnected"){
+                peers.splice(peers.indexOf(msg.data), peers.indexOf(msg.data) >= 0 ? 1 : 0);
+                updateUserList();
+            }else{
+            }
+        })
+    </script>
+</body>
+</html>

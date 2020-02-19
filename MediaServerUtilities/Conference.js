@@ -8,7 +8,7 @@ const SpeechDetection = require('./SpeechDetection.js');
 
 module.exports = class Conference extends Listenable(){
 
-    constructor({name, signaler, verbose = false, logger = console, architecture= 'mesh'}){
+    constructor({name, signaler, verbose = false, logger = console, architecture= 'mesh', video = {width: 420, height: 360}}){
         super();
         this._signaler = signaler;
         this._peers = new ConnectionManager({signaler, name, verbose, logger});
@@ -17,7 +17,7 @@ module.exports = class Conference extends Listenable(){
         this._speechDetection = new SpeechDetection({threshold: 65});
         this._videoMixer = new VideoMixer();
         this._videoMixer.addConfig(new SpeakerConfig(this._speechDetection), 'speaker');
-        this._audioMixer = new AudioMixer();
+        this._audioMixer = new AudioMixer(video);
         this._architecture = architecture;
         this._stream = null;
         this._display = null;
@@ -39,22 +39,25 @@ module.exports = class Conference extends Listenable(){
         this._peers.addEventListener('trackadded', track => {
             if(this._architecture === 'mesh'){
                 this._videoMixer.addStream(track, 'peers-'+track.id);
-                this._speechDetection.addStream(track, 'peers-'+track.id);
+                if(track.kind === "audio") this._speechDetection.addStream(track, 'peers-'+track.id);
             }
         });
         this._sfu.addEventListener('trackadded', track => {
             if(this._architecture === 'sfu'){
                 this._videoMixer.addStream(track, 'sfu-'+track.id);
-                this._speechDetection.addStream(track, 'sfu-'+track.id);
+                if(track.kind === "audio") this._speechDetection.addStream(track, 'sfu-'+track.id);
             }
         });
-
         this._peers.addEventListener('userconnected', user => this.dispatchEvent('userconnected', [user]));
         this._peers.addEventListener('userdisconnected', user => this.dispatchEvent('userdisconnected', [user]));
     }
 
     get architecture(){
         return this._architecture;
+    }
+
+    get members(){
+        return this._peers.users;
     }
 
     _getArchitectureHandler(name = null){
@@ -74,10 +77,12 @@ module.exports = class Conference extends Listenable(){
     async addWebcam(config = {video: true, audio: true}){
         this._stream = await window.navigator.mediaDevices.getUserMedia(config);
         this._getArchitectureHandler().addMedia(this._stream);
+        this._speechDetection.addStream(this._getArchitectureHandler().addedTracks().filter(tr => tr.kind === 'audio'));
     }
 
     async addMedia(m){
         this._getArchitectureHandler().addMedia(m);
+        this._speechDetection.addStream(this._getArchitectureHandler().addedTracks().filter(tr => tr.kind === 'audio'));
     }
 
     displayOn(element){
