@@ -1,10 +1,10 @@
-const Lobby = require('./Lobby.js');
+const Room = require('./Room.js');
 const ID = require('./ID.js');
 const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const port = process.env.port || process.argv.slice(2).pop() || 8808;
-const lobby = new Lobby({name: 'SFU', minMembers: 0});
+const lobby = new Room({name: 'SFU', minMembers: 0});
 app.use(bodyParser.json());
 app.use(express.static('public'));
 

@@ -1,13 +1,14 @@
 const Listenable = require('./Listenable.js');
 
 /**
+ * @class
  * implements a simple, websocket-based Signaler,
  * which can be also used as a reference or interface for other signalling solutions (like Server-Sent-Event-based or HTTP-Push)
  * All signalers expose a send function, which accepts serializable objects and allow adding a 'message' EventListener
  * by calling addEventListener('message', function callback({type="message", data}){...}) and a 'close' EventListener by calling
  * addEventListener('close', function callback(){...})
  * */
-module.exports = class Signaler extends Listenable(){
+class Signaler extends Listenable(){
 
     /**
      * construct a new signaller
@@ -65,4 +66,6 @@ module.exports = class Signaler extends Listenable(){
         this.dispatchEvent('message', [msg]);
     }
 
-};
+}
+
+module.exports = Signaler;

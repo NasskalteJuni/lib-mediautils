@@ -7,7 +7,7 @@ const lobbies = [];
  * Lobbies are in memory (non-persistent) structures that have 0-n members
  * A Lobby with 0 members will cease to exist after a defined time, so they actually need 1-n members to stay open
  * */
-class Lobby{
+class Room{
 
     /**
      * @enum
@@ -35,14 +35,14 @@ class Lobby{
      * */
     constructor({name, creator, password='', maxMembers=Infinity, minMembers=0, maxEmptyMinutes=0, id=ID()} = {}){
         this._created = new Date();
-        if(Lobby.byName(name)) throw new Error('NAME ALREADY IN USE');
+        if(Room.byName(name)) throw new Error('NAME ALREADY IN USE');
         this._name = name;
         this._creator = creator;
         this._members = [];
         this._password = password;
         this._maxMembers = maxMembers;
         this._minMembers = minMembers;
-        this._state = this._members.length >= this._minMembers ? Lobby.STATES.ACTIVE : Lobby.STATES.SEARCHING;
+        this._state = this._members.length >= this._minMembers ? Room.STATES.ACTIVE : Room.STATES.SEARCHING;
         this._id = id;
         this._maxEmptyMinutes = maxEmptyMinutes;
         this._closingTimer = null;
@@ -56,7 +56,7 @@ class Lobby{
     /**
      * retrieve a Lobby object with the given id
      * @param id [string] the Lobby's id
-     * @return [Lobby|null] the Lobby or null of no Lobby with the given id was found
+     * @return [Room|null] the Lobby or null of no Lobby with the given id was found
      * */
     static byId(id){
         return lobbies.reduce((found, lobby) => lobby.id === id ? lobby : found, null);
@@ -152,7 +152,7 @@ class Lobby{
      * set the current Lobby state
      * */
     set state(lobbyState){
-        if(lobbyState !== Lobby.STATES.SEARCHING && lobbyState !== Lobby.STATES.FINISHED && lobbyState !== Lobby.STATES.ACTIVE) throw new Error("INVALID LOBBY STATE");
+        if(lobbyState !== Room.STATES.SEARCHING && lobbyState !== Room.STATES.FINISHED && lobbyState !== Room.STATES.ACTIVE) throw new Error("INVALID LOBBY STATE");
         this._state = lobbyState;
     }
 
@@ -240,4 +240,4 @@ class Lobby{
 
 }
 
-module.exports = Lobby;
+module.exports = Room;

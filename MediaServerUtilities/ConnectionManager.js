@@ -1,6 +1,10 @@
 const Listenable = require('./Listenable.js');
 const Connection = require('./ConnectionWithRollback.js');
 
+/**
+ * @class
+ * Allows to manage a set of Connection {@link Connection}
+ * */
 class ConnectionManager extends Listenable(){
 
     /**

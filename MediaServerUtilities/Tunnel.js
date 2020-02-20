@@ -1,9 +1,9 @@
 /**
- * @private
- * A class that tunnels between the browser environment node module and its inside
- * Only intended to be used together with BrowserEnvironment, therefore private
+ * @class
+ * A class that tunnels between the BrowserEnvironment module and its inside.
+ * Only intended to be used together with BrowserEnvironment!
  * */
-class tunnel{
+class Tunnel{
 
     /**
      * Creates a new, but still closed tunnel instance
@@ -73,4 +73,4 @@ class tunnel{
 
 }
 
-module.exports = tunnel;
+module.exports = Tunnel;

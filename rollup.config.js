@@ -1,5 +1,7 @@
 const resolve = require('rollup-plugin-node-resolve');
 const commonjs = require('rollup-plugin-commonjs');
+const jsdoc = require('rollup-plugin-jsdoc');
+const path = require('path');
 
 module.exports = {
     input: './MediaServerUtilities/index.js',
@@ -11,6 +13,7 @@ module.exports = {
         exports: 'named'
     },
     plugins: [
+        jsdoc({args:  ['--destination', path.resolve('./dist/docs'), '--package', path.resolve('./package.json')], config: path.resolve('./jsdoc.config.js')}),
         resolve({extensions: ['.js']}),
         commonjs({sourceMap: true})
     ],

@@ -2,13 +2,11 @@ const puppeteer = require('puppeteer');
 const read = require('fs').readFileSync;
 const Tunnel = require('./Tunnel.js');
 const Listenable = require('./Listenable.js');
-let executablePath = 'C:\\Users\\lukas\\AppData\\Local\\Google\\Chrome SxS\\Application\\chrome.exe';
 
+/**
+ * Allows controlling a headless browser and exchanging data with it
+ * */
 class BrowserEnvironment extends Listenable(){
-
-    static set executablePath(path){
-        executablePath = path;
-    }
 
     static set debug(bool) {
         BrowserEnvironment._debug = bool;
@@ -18,12 +16,15 @@ class BrowserEnvironment extends Listenable(){
         return !!BrowserEnvironment._debug;
     }
 
+    /**
+     * @private
+     * */
     static _getPuppet() {
         if (!BrowserEnvironment._browser) {
             const isDebug = BrowserEnvironment.debug;
             const flags = ["--allow-insecure-localhost","--autoplay-policy=no-user-gesture-required","--no-user-gesture-required"];
             if(isDebug) flags.push("--webrtc-event-logging");
-            return puppeteer.launch({headless: !isDebug, devtools: isDebug, executablePath, args: flags}).then(browser => {
+            return puppeteer.launch({headless: !isDebug, devtools: isDebug, args: flags}).then(browser => {
                 BrowserEnvironment._browser = browser;
                 return browser;
             });
@@ -31,12 +32,17 @@ class BrowserEnvironment extends Listenable(){
         return Promise.resolve(BrowserEnvironment._browser);
     }
 
+    /**
+     * create a new browser environment with everything that belongs to a website opened by a browser
+     * @param id [string] a unique identifier for the new environment
+     * @param config [object]
+     * @param config.
+     * */
     constructor(id, config = {}) {
         super();
         this._id = id;
         this._isInitialized = false;
-        this._onInitializedCb = config["onInitialized"] ? config["onInitialized"] : () => {
-        };
+        this._onInitializedCb = () => {};
         this._pageTemplate = config["template"] || null;
         this._customScripts = config["scripts"] || [];
         this._globals = config["globals"] || {};
@@ -77,16 +83,26 @@ class BrowserEnvironment extends Listenable(){
         }
     }
 
-
+    /**
+     * @param cb [function] a function that is triggered, as soon as the environment is ready to be used.
+     * If the function was registered after this is already the case, it is immediately triggered
+     * */
     set onInitialized(cb) {
         this._onInitializedCb = cb;
         if (this._isInitialized) cb();
     }
 
+    /**
+     * flag indicating if the environment can be used already
+     * @readonly
+     * */
     get isInitialized() {
         return this._isInitialized;
     }
 
+    /**
+     * closes the browser environment and frees used resources
+     * */
     async destroy() {
         this.dispatchEvent('destroy');
         return this._instance.close();
