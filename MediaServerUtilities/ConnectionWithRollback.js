@@ -97,28 +97,30 @@ class Connection extends Listenable() {
             bugfix.autoplay = true;
             bugfix.srcObject = new MediaStream([track]);
         }
-        this.dispatchEvent('trackadded', [track]);
+        const matches = this._connection.getTransceivers().filter(tr => tr.receiver.track && tr.receiver.track.id === track.id);
+        const mid = matches.length > 0 ? matches[0].mid : null;
+        this.dispatchEvent('trackadded', [track, mid]);
         streams.forEach(stream => {
             if (this._receivedStreams.findIndex(s => s.id === stream.id) === -1) {
                 this._receivedStreams.push(stream);
                 newStreams.push(stream);
-                this.dispatchEvent('streamadded', [stream]);
+                this.dispatchEvent('streamadded', [stream, track, mid]);
             }
         });
         this._receivedTracks.push(track);
         this.dispatchEvent('mediachanged', [{change: 'added', track, streams, peer: this._peer}]);
         track.addEventListener('ended', () => {
             this._receivedTracks = this._receivedTracks.filter(t => t.id !== track.id);
-            this.dispatchEvent('mediachanged', [{change: 'removed', track, peer: this._peer}]);
-            this.dispatchEvent('trackremoved', [track]);
+            this.dispatchEvent('mediachanged', [{change: 'removed', track, peer: this._peer, mid}]);
+            this.dispatchEvent('trackremoved', [track, mid]);
             streams.forEach(stream => {
                 if (!stream.active) {
                     this._receivedStreams = this._receivedStreams.filter(s => s.id !== stream.id);
-                    this.dispatchEvent('streamremoved', [stream]);
+                    this.dispatchEvent('streamremoved', [stream, track, mid]);
                 }
             })
         });
-        this.dispatchEvent('mediachanged', [{change: 'added', track, streams, newStreams, peer: this._peer}]);
+        this.dispatchEvent('mediachanged', [{change: 'added', track, streams, newStreams, peer: this._peer, mid}]);
     }
 
 
@@ -149,6 +151,8 @@ class Connection extends Listenable() {
             await this._handleClosingConnection();
         }else if(type === 'receiver:stop'){
             await this._stopReceiver(msg.data)
+        }else if(type === 'track:meta'){
+            this._changeMetaOfTrack(msg.data.mid, msg.data.meta);
         }else{
             if(this._verbose) this._logger.log('could not find handle for msg type',type,msg);
         }
@@ -229,7 +233,8 @@ class Connection extends Listenable() {
             direction: "sendonly",
             streams
         };
-        this._connection.addTransceiver(track, streams instanceof Array ? config : streams);
+        const transceiver = this._connection.addTransceiver(track, streams instanceof Array ? config : streams);
+        if(track instanceof MediaStreamTrack) this._signaler.send({type: "track:meta", data: {mid: transceiver.mid, meta: track.meta || ""}, receiver: this._peer});
     }
 
     /**
@@ -282,6 +287,19 @@ class Connection extends Listenable() {
 
     /**
      * @private
+     * changes additional info of a received track, if it does not find the track or something else is wrong, this method fails silently.
+     * */
+    _changeMetaOfTrack(mid, meta){
+        const matches = this._connection.getTransceivers().filter(tr => tr.mid === mid);
+        if(matches.length && matches[0].receiver.track){
+            const track = matches[0].receiver.track;
+            track.meta = meta;
+            track.dispatchEvent(new Event('metachanged'));
+        }
+    }
+
+    /**
+     * @private
      * replaces a track or every track of a matching type with the given replacement track
      * */
     _replaceTrack(searchTrack, replacementTrack) {
@@ -294,6 +312,7 @@ class Connection extends Listenable() {
             if (transceiver.direction === "sendrecv" || transceiver.direction === "sendonly") {
                 if (transceiver.sender.track && (searchingActualTrack && transceiver.sender.track.id === searchTrack.id) || (searchingTrackKind && transceiver.sender.track.kind === searchTrack)) {
                     transceiver.sender.replaceTrack(replacementTrack);
+                    if(replacementTrack instanceof MediaStreamTrack) this._signaler.send({type: "track:meta", data: {mid: transceiver.mid, meta: track.meta || ""}, receiver: this._peer});
                 }
             }
         })

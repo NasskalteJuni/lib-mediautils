@@ -1,7 +1,7 @@
 {
-  "name": "sfu-example",
+  "name": "example",
   "version": "1.0.0",
-  "description": "how to transcribe and forward different media streams",
+  "description": "example webrtc application",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,7 +9,7 @@
   "author": "nasskaltejuni",
   "license": "ISC",
   "dependencies": {
-    "body-parser": "^1.19.0",
-    "express": "^4.17.1"
+    "faye-websocket": "^0.11.3",
+    "puppeteer": "^1.20.0"
   }
 }

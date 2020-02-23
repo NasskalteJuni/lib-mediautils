@@ -2,27 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SFU Example</title>
-    <script src="./sendForm.js"></script>
+    <title>Test</title>
 </head>
 <body>
-    <form name="join" id="join">
-        <input type="text" placeholder="your name" autocomplete="off" required id="name" name="name">
-        <button type="submit">start</button>
-        <p id="error"></p>
+<main>
+    <form name="login" method="GET" action="room.html">
+        <input type="text" name="name" placeholder="Your name" autocomplete="off" spellcheck="false" required>
+        <button type="submit" id="enter">Enter</button>
     </form>
-    <script>
-        document.getElementById('join').addEventListener('submit',async function (e) {
-            e.preventDefault();
-            try{
-                const response = await sendForm('/join/','join');
-                const user = await response.json();
-                location.href = '/lobby.html?user_id='+user.id+'&user_name='+user.name;
-            }catch (e) {
-                document.getElementById('error').innerText = e.toString();
-            }
-            return false;
-        })
-    </script>
+</main>
+<script>
+    const loginForm = document.forms.login;
+    const error = document.getElementById("error");
+</script>
 </body>
 </html>

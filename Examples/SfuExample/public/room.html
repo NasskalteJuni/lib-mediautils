@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Lobby</title>
+    <script src="/mediautils.js"></script>
+</head>
+<body>
+    <main>
+        <div id="lobby">
+            <video id="display" autoplay></video>
+            <button id="media">activate webcam</button>
+        </div>
+        <div id="list">
+
+        </div>
+    </main>
+    <script>
+        const name = new URLSearchParams(location.search).get('name');
+        const peers = [];
+        const speechDetection = new MediaUtilities.SpeechDetection();
+        speechDetection.addEventListener('speechchange', () => console.log('speakers:', speechDetection.speakers, 'last speaker:', speechDetection.lastSpeaker));
+        const videoMixer = new MediaUtilities.VideoMixer({width: 640, height: 480, fps: 30});
+        videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Speaker(speechDetection));
+        const audioMixer = new MediaUtilities.AudioMixer();
+        document.getElementById("display").srcObject = new MediaStream([videoMixer.outputTrack, audioMixer.outputTrack]);
+        const signaler = new MediaUtilities.Signaler({endpoint: window.origin.replace(/^http/,'ws') + '?name='+ name});
+        const sfu = new MediaUtilities.Connection({id: name, name, peer: '@sfu', isYielding: false, signaler, verbose: true, logger: console});
+        sfu.addEventListener('trackadded', track => {
+            if(track.kind === "video"){
+                videoMixer.addStream(track);
+            }else{
+                audioMixer.addStream(track);
+                speechDetection.addStream(track);
+            }
+        });
+        sfu.addEventListener('trackremoved', track => {
+            if(track.kind === "video"){
+                videoMixer.removeStream(track);
+            }else{
+                audioMixer.removeStream(track);
+                speechDetection.removeStream(track);
+            }
+        });
+        const updateUserList = () => document.getElementById("list").innerText = peers.join(',');
+        document.getElementById("media").addEventListener("click", async e => {
+            stream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+            sfu.addMedia(stream);
+            videoMixer.addStream(stream);
+            speechDetection.addStream(stream);
+            e.target.parentNode.removeChild(e.target);
+        });
+        signaler.addEventListener("message", msg => {
+            msg = typeof msg === "string" ? JSON.parse(msg) : msg;
+            console.log(msg);
+            if(msg.type === "user:list"){
+                peers.splice(0, peers.length, msg.data);
+                updateUserList()
+            }else if(msg.type === "user:connected"){
+                peers.push(msg.data);
+                updateUserList();
+            }else if(msg.type === "user:disconnected"){
+                peers.splice(peers.indexOf(msg.data), peers.indexOf(msg.data) >= 0 ? 1 : 0);
+                updateUserList();
+            }else{
+            }
+        })
+    </script>
+</body>
+</html>
