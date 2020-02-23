@@ -13,7 +13,10 @@
         connections.addEventListener('userconnected', user => {
             connections.users.forEach(u => {
                 if(u !== user){
-                    connections.get(u).streams.forEach(stream => connections.get(user).addMedia(stream));
+                    connections.get(u).streams.forEach(stream => {
+                        stream.meta = user;
+                        connections.get(user).addMedia(stream)
+                    });
                 }
             })
         });
@@ -29,10 +32,7 @@
         });
         connections.addEventListener('trackadded', (track, user) => {
             track.contentHint = track.kind === "video" ? "motion" : "speech";
-            if(track.kind === "video"){
-                track.applyConstraints({width: {ideal: 640}, height: {ideal: 480}});
-                track.applyConstraints({frameRate: {max: 30}});
-            }
+            if(track.kind === "video") track.applyConstraints({frameRate: {max: 30}});
             connections.users.forEach(u => {
                 if(u !== user){
                     track.meta = user;

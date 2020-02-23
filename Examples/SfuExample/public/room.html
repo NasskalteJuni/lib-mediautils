@@ -18,7 +18,7 @@
     <script>
         const name = new URLSearchParams(location.search).get('name');
         const peers = [];
-        const speechDetection = new MediaUtilities.SpeechDetection();
+        const speechDetection = new MediaUtilities.SpeechDetection({samplingInterval: 50, requiredSamplesForSpeech: 10, threshold: -50});
         speechDetection.addEventListener('speechchange', () => console.log('speakers:', speechDetection.speakers, 'last speaker:', speechDetection.lastSpeaker));
         const videoMixer = new MediaUtilities.VideoMixer({width: 640, height: 480, fps: 30});
         videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Speaker(speechDetection));
@@ -27,27 +27,33 @@
         const signaler = new MediaUtilities.Signaler({endpoint: window.origin.replace(/^http/,'ws') + '?name='+ name});
         const sfu = new MediaUtilities.Connection({id: name, name, peer: '@sfu', isYielding: false, signaler, verbose: true, logger: console});
         sfu.addEventListener('trackadded', track => {
-            if(track.kind === "video"){
-                videoMixer.addStream(track);
-            }else{
-                audioMixer.addStream(track);
-                speechDetection.addStream(track);
-            }
+            const handleTrack = () => {
+                const id = track.meta;
+                if(track.kind === "video"){
+                    videoMixer.addStream(track, id);
+                }else{
+                    audioMixer.addStream(track, id);
+                    speechDetection.addStream(track, id);
+                }
+            };
+            if(track.meta) handleTrack();
+            else track.addEventListener('metachanged', () => handleTrack());
         });
         sfu.addEventListener('trackremoved', track => {
             if(track.kind === "video"){
-                videoMixer.removeStream(track);
+                videoMixer.removeStream(track, track.meta);
             }else{
-                audioMixer.removeStream(track);
-                speechDetection.removeStream(track);
+                audioMixer.removeStream(track, track.meta);
+                speechDetection.removeStream(track, track.meta);
             }
         });
         const updateUserList = () => document.getElementById("list").innerText = peers.join(',');
         document.getElementById("media").addEventListener("click", async e => {
             stream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+            stream.meta = name;
             sfu.addMedia(stream);
-            videoMixer.addStream(stream);
-            speechDetection.addStream(stream);
+            videoMixer.addStream(stream, name);
+            speechDetection.addStream(stream, name);
             e.target.parentNode.removeChild(e.target);
         });
         signaler.addEventListener("message", msg => {

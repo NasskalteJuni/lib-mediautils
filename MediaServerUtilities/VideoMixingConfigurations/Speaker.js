@@ -9,7 +9,7 @@ class Speaker extends VideoMixingConfiguration{
         const smallFrameWidth = 80;
         const smallFrameHeight = 60;
         const smallFrameOffset = 5;
-        const idIsNowSpeaking = (id, index) => speechDetection.speakers.indexOf(id) >= 0 || (speechDetection.silence && (speechDetection.lastSpeaker === id || (speechDetection.lastSpeaker === null  && index === 0)));
+        const idIsNowSpeaking = (id, index) => speechDetection.lastSpeaker === id  || (speechDetection.lastSpeaker === null && index === 0);
         const frameX = stats => {
             if(idIsNowSpeaking(stats.id, stats.drawIndex)){
                 return speechDetection.silence ? silenceOffset : noiseOffset;

@@ -38,6 +38,8 @@ class Connection extends Listenable() {
         this._receivedStreams = [];
         this._receivedTracks = [];
         this._addedTracks = [];
+        this._metaCache = {};
+        this._unboundTransceivers = [];
         this._logger = logger;
         this._setupPeerConnection();
     }
@@ -79,6 +81,7 @@ class Connection extends Listenable() {
         this.addEventListener('lockneeded', () => this._initiateExchange());
         this._connection.addEventListener('iceconnectionstatechange', () => this._handleIceChange());
         this._connection.addEventListener('track', ({track, streams}) => this._handleIncomingTrack(track, streams));
+        this._connection.addEventListener('signalingstatechange', () => this._syncNewTransceivers());
         if (this._verbose) this._logger.log('created new peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
     }
 
@@ -93,6 +96,10 @@ class Connection extends Listenable() {
         }
         const matches = this._connection.getTransceivers().filter(tr => tr.receiver.track && tr.receiver.track.id === track.id);
         const mid = matches.length > 0 ? matches[0].mid : null;
+        if(this._metaCache[mid]){
+            track.meta = this._metaCache[mid];
+            delete this._metaCache[mid];
+        }
         this.dispatchEvent('trackadded', [track, mid]);
         streams.forEach(stream => {
             if (this._receivedStreams.findIndex(s => s.id === stream.id) === -1) {
@@ -259,8 +266,7 @@ class Connection extends Listenable() {
             direction: "sendonly",
             streams
         };
-        const transceiver = this._connection.addTransceiver(track, streams instanceof Array ? config : streams);
-        if(track instanceof MediaStreamTrack) this._signaler.send({type: 'track:meta', data: {mid: transceiver.mid, meta: track.meta || ""}, receiver: this._peer});
+        this._unboundTransceivers.push(this._connection.addTransceiver(track, streams instanceof Array ? config : streams));
     }
 
     /**
@@ -319,7 +325,25 @@ class Connection extends Listenable() {
             const track = matches[0].receiver.track;
             track.meta = meta;
             track.dispatchEvent(new Event('metachanged'));
+        }else{
+            this._metaCache[mid] = meta;
         }
+    }
+
+    /**
+     * @private
+     * */
+    _syncNewTransceivers(){
+        const boundTransceivers = [];
+        this._unboundTransceivers.forEach(transceiver => {
+            const binding = this._connection.getTransceivers().filter(tr => tr === transceiver);
+            if(binding.length){
+                const bound = binding[0];
+                boundTransceivers.push(bound);
+                if(bound.sender.track && bound.sender.track.meta) this._signaler.send({type: "track:meta", data: {mid: bound.mid, meta: bound.sender.track.meta}, receiver: this._peer});
+            }
+        });
+        this._unboundTransceivers = this._unboundTransceivers.filter(tr => boundTransceivers.indexOf(tr) === -1);
     }
 
     _replaceTrack(searchTrack, replacementTrack) {
@@ -388,7 +412,10 @@ class Connection extends Listenable() {
             this._addTrackToConnection(arguments[0], arguments[1]);
         } else {
             if (media instanceof MediaStream) {
-                media.getTracks().forEach(track => queue(track, [media]));
+                media.getTracks().forEach(track => {
+                    if(stream.meta) track.meta = stream.meta;
+                    queue(track, [media])
+                });
             } else if (media instanceof MediaStreamTrack) {
                 queue(media, [new MediaStream([media])]);
             } else if (typeof media === "string" && ["audio", "video", "*"].indexOf(media) >= 0) {
