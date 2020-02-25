@@ -1,19 +1,21 @@
 const Listenable = require('./Listenable.js');
 
 /**
- * @class
  * implements a simple, websocket-based Signaler,
  * which can be also used as a reference or interface for other signalling solutions (like Server-Sent-Event-based or HTTP-Push)
  * All signalers expose a send function, which accepts serializable objects and allow adding a 'message' EventListener
  * by calling addEventListener('message', function callback({type="message", data}){...}) and a 'close' EventListener by calling
  * addEventListener('close', function callback(){...})
+ * @class
+ * @implements Listenable
  * */
 class Signaler extends Listenable(){
 
     /**
      * construct a new signaller
-     * @param endpoint [string] URL or connection string to connect the signaler client to the server
-     * @param WebSocket [WebSocket.prototype] the prototype to use for a new socket connection, defaults to browser-native WebSocket
+     * @param {Object} config
+     * @param {string} config.endpoint URL or connection string to connect the signaler client to the server
+     * @param {WebSocket} [config.socket] A socket to use for a new socket connection, defaults to a newly created, browser-native WebSocket with the given endpoint
     * */
     constructor({endpoint, socket=null} = {}){
         super();
@@ -27,7 +29,7 @@ class Signaler extends Listenable(){
 
     /**
      * sends messages, if not closed
-     * @param msg [serializable]
+     * @param {Object} msg A serializable, non-recursive Object
      * */
     send(msg){
         msg = JSON.stringify(msg);
@@ -43,8 +45,8 @@ class Signaler extends Listenable(){
     }
 
     /**
-     * @readonly checks if the connection is closed (this means: no messages can be sent)
-     * @returns boolean
+     * checks if the connection is closed (this means: no messages can be sent)
+     * @readonly
      * */
     get closed(){
         return this._connection.readyState > 1;
@@ -52,9 +54,9 @@ class Signaler extends Listenable(){
 
 
     /**
-     * @private
      * handles incoming socket messages and parses them accordingly
-     * @param e [Event] a message event
+     * @param {Event} e a message event
+     * @private
      * */
     _handleMessage(e){
         let msg = JSON.parse(e.data);

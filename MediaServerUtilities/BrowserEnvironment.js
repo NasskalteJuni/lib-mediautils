@@ -5,6 +5,8 @@ const Listenable = require('./Listenable.js');
 
 /**
  * Allows controlling a headless browser and exchanging data with it
+ * @class
+ * @implements Listenable
  * */
 class BrowserEnvironment extends Listenable(){
 
@@ -34,9 +36,12 @@ class BrowserEnvironment extends Listenable(){
 
     /**
      * create a new browser environment with everything that belongs to a website opened by a browser
-     * @param id [string] a unique identifier for the new environment
-     * @param config [object]
-     * @param config.
+     * @param {string} id A unique identifier for the new environment
+     * @param {Object} [config={}] Settings to use for the created environment
+     * @param {string} [config.template] Path to the page template that the browser shall open. Works best with absolute paths
+     * @param {Array} [config.scripts] A list of paths to scripts that shall be loaded into the open web page
+     * @param {Object} [config.globals] A dictionary of globals to load into the web page opened by the browser. The key will be the global constants name
+     * @param {boolean} [config.ignoreScriptOrder=false] Can be used to reduce the load- and start-time, if the order of the scripts does not matter. Otherwise, the scripts given will be loaded in the order they were given
      * */
     constructor(id, config = {}) {
         super();

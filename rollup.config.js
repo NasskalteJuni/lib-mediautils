@@ -13,7 +13,7 @@ module.exports = {
         exports: 'named'
     },
     plugins: [
-        jsdoc({args:  ['--destination', path.resolve('./dist/docs'), '--package', path.resolve('./package.json')], config: path.resolve('./jsdoc.config.js')}),
+        jsdoc({args:  ['-r','--destination', path.resolve('./dist/docs'), '--package', path.resolve('./package.json')], config: path.resolve('./jsdoc.config.js')}),
         resolve({extensions: ['.js']}),
         commonjs({sourceMap: true})
     ],

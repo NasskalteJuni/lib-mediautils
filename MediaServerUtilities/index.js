@@ -1,5 +1,6 @@
 const AudioMixer = require('./AudioMixer.js');
 const VideoMixer = require('./VideoMixer.js');
+const Recorder = require('./Recorder.js');
 const ConnectionManager = require('./ConnectionManager.js');
 const Connection = require('./ConnectionWithRollback.js');
 const SpeechDetection = require('./SpeechDetection.js');
@@ -17,6 +18,7 @@ const Speaker = require('./VideoMixingConfigurations/Speaker.js');
 
 module.exports = {
     Signaler,
+    Recorder,
     VideoMixer,
     AudioMixer,
     Transcriber,

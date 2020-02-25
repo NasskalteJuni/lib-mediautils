@@ -2,12 +2,14 @@ const VideoMixingConfiguration = require('../VideoMixingConfiguration.js');
 
 /**
  * Places 1 video in the middle and the other 4s in a grid around it
+ * @extends VideoMixingConfiguration
+ * @class
  * */
 class Middle extends VideoMixingConfiguration{
 
     /**
-     * create a grid of streams where one stream (the last one) is in the middle
-     * @param priority [int=0]
+     * create a grid of streams where one stream (the last one) is in the middle. It is only applicable for 5 conference call members
+     * @param {Number} [priority=0] the priority of the config
      * */
     constructor(priority = 0){
         super({

@@ -1,6 +1,12 @@
 const Configurations = require("./_VideoMixingConfigurations.js");
 const Videos = require("./_VideoStreams.js");
 
+/**
+ * Utility to mix video streams to one single video output
+ * @class
+ * @implements Listenable
+ * @implements MediaConsuming
+ * */
 class VideoMixer extends Videos(Configurations()){
 
     /**
@@ -73,8 +79,8 @@ class VideoMixer extends Videos(Configurations()){
     }
 
     /**
-     * @private
      * set up a canvas to mix videos according to the optionally given width and height
+     * @private
      * */
     _initCanvas(canvas, width, height){
         if(canvas === null) canvas = document.createElement("canvas");
@@ -102,7 +108,7 @@ class VideoMixer extends Videos(Configurations()){
 
     /**
      * mixed output as a MediaStream
-     * @return MediaStream
+     * @readonly
      * */
     get out(){
         return this._out;
@@ -110,23 +116,23 @@ class VideoMixer extends Videos(Configurations()){
 
     /**
      * mixed output as a MediaStreamTrack of kind video
-     * @return MediaStreamTrack
+     * @readonly
      * */
     get outputTrack(){
         return this._out.getVideoTracks()[0];
     }
 
     /**
-     * @readonly
      * the pixel width of the mixed video
+     * @readonly
      * */
     get width(){
         return this._width;
     }
 
     /**
-     * @readonly
      * the pixel height of the mixed video
+     * @readonly
      * */
     get height(){
         return this._height;
@@ -150,14 +156,15 @@ class VideoMixer extends Videos(Configurations()){
 
     /**
      * debug function. allows you to see the calculated values and used configs
+     * @ignore
      * */
     snapshot(fn){
         this._snapshot = fn;
     }
 
     /**
-     * @private
      * draw the current streams on according to the current config in use on a canvas
+     * @private
      * */
     _draw(){
         if(!this.currentConfig) return;

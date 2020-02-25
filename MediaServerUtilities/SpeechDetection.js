@@ -1,18 +1,24 @@
 const Listenable = require('./Listenable.js');
 
+/**
+ * A noise or speech detection utility that checks if a given stream has decibel levels above a defined threshold
+ * @class
+ * @implements Listenable
+ * @implements MediaConsuming
+ * */
 class SpeechDetection extends Listenable(){
 
     /**
-     * creates a speech (or noise) detector,
+     * creates a speech or noise detector (since there is de facto no recognition of speech but only of sound),
      * which checks which given media streams or tracks are currently loud enough for typical human speech
      * (key parts were directly taken from or inspired by hark.js https://github.com/latentflip/hark/)
-     * @param config [object]
-     * @param config.threshold [number=-70] a dBFS measure. Positive numbers will be made negative
-     * @param config.samplingInterval [number=100] milliseconds between samples. Higher sample rate equals earlier detection but also more cpu cost
-     * @param config.smoothingConstant [number=0.1] smoothes input to avoid peaks, set values with caution
-     * @param config.requiredSamplesForSpeech [number=5] on how many consecutive samples must be a dBFS value over threshold to be considered speech
-     * @param config.verbose [boolean=false] logging on events if true
-     * @param config.logger [logger=console] a logger to use, defaults to browser console
+     * @param {Object} [config]
+     * @param {Number} [config.threshold=-70] A dBFS measure. Positive numbers will be made negative. Defaults to -70, which is approximately the loudness of human voices
+     * @param {Number} [config.samplingInterval=100] Milliseconds between samples. Higher sample rate equals earlier detection but also more cpu cost
+     * @param {Number} [config.smoothingConstant=0.1] Smoothes input to avoid peaks, set values with caution
+     * @param {Number} [config.requiredSamplesForSpeech=5] How many consecutive samples must have an average dBFS value over threshold to be considered speech
+     * @param {Boolean} [config.verbose=false] Logging on events if true
+     * @param {console} [config.logger=console] A logger to use, defaults to browser console, only used when verbose is set to true
      * */
     constructor({threshold=-70, samplingInterval=100, smoothingConstant=0.1, requiredSamplesForSpeech=5, verbose=false, logger=console} = {}){
         super();
@@ -65,48 +71,49 @@ class SpeechDetection extends Listenable(){
     }
 
     /**
-     * @param v [number] decibel (dBFS) value set as threshold for sound, non negative values will be made negative
+     * @param {Number} dBFS Decibel value set as threshold for sound, non negative values will be made negative
      * */
-    set threshold(v){
-        this._threshold = -Math.abs(v);
+    set threshold(dBFS){
+        this._threshold = -Math.abs(dBFS);
     }
 
     /**
      * the current decibel (dBFS) threshold for a stream to be considered not silent
+     *
      * */
     get threshold(){
         return this._threshold;
     }
 
     /**
-     * @readonly
      * current stats by each registered media
+     * @readonly
      * */
     get out(){
         return Object.assign({}, this._out);
     }
 
     /**
-     * @readonly
      * if all registered media is silent
+     * @readonly
      * */
     get silence(){
         return this._silence;
     }
 
     /**
-     * @readonly
      * a list of the latest speakers (empty when no one spoke since the last sample)
+     * @readonly
      * */
     get speakers(){
         return this._lastSpeakers
     }
 
     /**
-     * @readonly
      * return the last or current speaker.
      * If currently there is silence, return the one that spoke last,
      * if currently someone is speaking, return the first of the speaking ones
+     * @readonly
      * */
     get lastSpeaker(){
         return this._lastSpeaker;
@@ -114,7 +121,8 @@ class SpeechDetection extends Listenable(){
 
     /**
      * get the (current) deciBel values (min, max, avg) for the given id
-     * @param id [string] the media identifier used
+     * @param {string} id The media identifier used
+     * @private
      * */
     _getStatsFor(id){
         if(!this._out[id]) this._out[id] = {consecutiveSamplesOverTreshold: 0, speaking: false, current: null};
@@ -159,11 +167,11 @@ class SpeechDetection extends Listenable(){
     }
 
     /**
-     * @private
      * takes an analyzer and sample buffer and retrieves the noise volume from it
      * @param analyzer [WebAudioNode] a web audio analyzer node
      * @param fftBins [Float32Array] a native buffer array containing the fft data of the sample at given time
      * @returns Object a dictionary containing the minimal, maximal and average volume in the sample
+     * @private
      * */
     _analyzeVolume(analyzer, fftBins){
         analyzer.getFloatFrequencyData(fftBins);
@@ -183,9 +191,9 @@ class SpeechDetection extends Listenable(){
     }
 
     /**
-     * @private
      * check for each user, if the current media sample is above the threshold and therefore seen as more than just a bit of noise
      * @param id [string] the identifier for the given media
+     * @private
      * */
     _processForEachUser(id){
         const output = this._getStatsFor(id);

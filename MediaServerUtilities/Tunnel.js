@@ -1,12 +1,14 @@
 /**
- * @class
  * A class that tunnels between the BrowserEnvironment module and its inside.
  * Only intended to be used together with BrowserEnvironment!
+ * @protected
+ * @class
  * */
 class Tunnel{
 
     /**
      * Creates a new, but still closed tunnel instance
+     * @param {BrowserEnvironment} browserEnvironment The BrowserEnvironment that uses the Tunnel to communicate with the opened web page
      * */
     constructor(browserEnvironment){
         this._instance = browserEnvironment._instance;
@@ -16,7 +18,7 @@ class Tunnel{
     }
 
     /**
-     * opens the Tunnel for bidirectional communication
+     * opens the Tunnel for bidirectional communication with the web page
      * */
     async open(){
         if(this._state === "open") throw new Error("Tunnel is already open");

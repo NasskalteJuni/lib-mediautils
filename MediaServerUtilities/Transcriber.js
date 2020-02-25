@@ -1,3 +1,6 @@
+/**
+ * Utility to simplify transcribing of outgoing media. Intended to be added to a Connection instead of media
+ * */
 class Transcriber {
 
     /**

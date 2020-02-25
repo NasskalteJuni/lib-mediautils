@@ -1,7 +1,5 @@
 /**
- * @exports Listenable
- * @param {*} superclass defaults to Object
- * @return {mixin:Listenable~mixin}
+ * @interface Listenable
  * @description defines a set of functions to listen for events, similar to the EventTarget Interface commonly used in the front end
  * */
 const Listenable = (superclass=Object) => class extends superclass{
@@ -15,10 +13,15 @@ const Listenable = (superclass=Object) => class extends superclass{
     }
 
     /**
-     * @methodOf! Listenable
+     * @callback EventHandlerFunction
+     * @param {...*} any arguments passed by the triggering instance
+     * */
+    /**
      * add a callback that is triggered when the given event occurs
-     * @param event [string] the event name to listen for
-     * @param fn [function] a function to trigger when the event occurs. The function does not receive an event but relevant values
+     * @param {string} event The event name to listen for
+     * @param {EventHandlerFunction} fn The function to trigger when the event occurs. The function does not receive an event but relevant values!
+     * @function
+     * @name Listenable#addEventListener
      * */
     addEventListener(event, fn){
         event = event.toLowerCase();
@@ -28,10 +31,11 @@ const Listenable = (superclass=Object) => class extends superclass{
     }
 
     /**
-     * @methodOf! Listenable
      * stop triggering a registered function / unregister a formerly given callback
-     * @param event [string] the event name to listen for
-     * @param fn [function] the registered function
+     * @param {string} event The event name to listen for
+     * @param {EventHandlerFunction} fn The registered function
+     * @function
+     * @name Listenable#removeEventListener
      * */
     removeEventListener(event, fn, all=false){
         event = event.toLowerCase();
@@ -46,11 +50,12 @@ const Listenable = (superclass=Object) => class extends superclass{
         }
     }
 
-    /**
-     * @memberOf! Listenable
+    /***
      * trigger all event handlers with the given event name
-     * @param event [string] the event name (and NOT AN EVENT OBJECT!) to trigger
-     * @param args [array=[]] an array of arguments to pass to the event listener functions
+     * @param {string} event the event name (and NOT AN EVENT OBJECT!) to trigger
+     * @param {Array} [args=[]] an array of arguments to pass to the event listener functions
+     * @function
+     * @name Listenable#dispatchEvent
      * */
     dispatchEvent(event, args=[]){
         event = event.toLowerCase();

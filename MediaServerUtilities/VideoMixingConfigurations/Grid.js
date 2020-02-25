@@ -1,9 +1,9 @@
 const VideoMixingConfiguration = require('../VideoMixingConfiguration.js');
 
 /**
+ * @param {Number} n the positive integer to factor
+ * @return {Array} A list of tuples of factoring numbers, unique (only a,b but not a,b and b,a) and sorted biggest factors first
  * @private
- * @param n [UInt] the positive integer to factor
- * @return array of tuples of factoring numbers, unique (only a,b but not a,b and b,a) and sorted biggest factors first
  * */
 function factors(n){
     if(n === null || n === undefined || isNaN(n)) throw new Error('Invalid argument, n must be a number but is ' + n);
@@ -21,15 +21,17 @@ function factors(n){
 }
 
 /**
- * Places Streams in a grid
+ * Places video streams in a grid
+ * @extends VideoMixingConfiguration
+ * @class
  * */
 class Grid extends VideoMixingConfiguration{
 
     /**
      * Creates a grid of videos, which works best for square numbers but also for numbers which can be factored by a and b with |a-b| <= 2
      * Everything else seemed to look bad
-     * @param priority [int=0]
-     * @param applicable [function=differenceBetweenTwoBiggestFactors(ids.length) <= 2]
+     * @param {Number} [priority=0] The priority of this config
+     * @param {Boolean|Function} [applicable=differenceBetweenTwoBiggestFactors(ids.length) <= 2]
      * */
     constructor(priority = 0, applicable = ids =>Math.abs(factors(ids.length)[0][1]-factors(ids.length)[0][0]) <= 2){
         super({

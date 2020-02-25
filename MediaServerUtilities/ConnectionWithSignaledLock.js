@@ -6,6 +6,8 @@ const timestamp = () => new Date().toISOString();
  * Introduces an abstraction layer around the RTCPeerConnection.
  * It uses a predefined signaling mechanism, handles common problems (short-time state errors, race-conditions) and
  * comfort functions (like accepting media-streams and transforming them into tracks or transceivers)
+ * @ignore
+ * @namespace
  * */
 class Connection extends Listenable() {
 
@@ -45,16 +47,18 @@ class Connection extends Listenable() {
     }
 
     /**
-     * @readonly
      * the id of the connection
+     * @ignore
+     * @readonly
      * */
     get id() {
         return this._id;
     }
 
     /**
-     * @readonly
      * the peer id which is the other endpoint of the connection
+     * @ignore
+     * @readonly
      * */
     get peer() {
         return this._peer;
@@ -62,6 +66,7 @@ class Connection extends Listenable() {
 
     /**
      * is logging enabled?
+     * @ignore
      * */
     get verbose() {
         return this._verbose;
@@ -69,12 +74,17 @@ class Connection extends Listenable() {
 
     /**
      * enable / disable logging
+     * @ignore
      * */
     set verbose(makeVerbose) {
         this._verbose = !!makeVerbose;
     }
 
-
+    /**
+     * register the necessary event listeners for the connection
+     * @ignore
+     * @private
+     * */
     _setupPeerConnection() {
         this._connection = new RTCPeerConnection(this._connectionConfig);
         this._connection.addEventListener('icecandidate', e => this._forwardIceCandidate(e.candidate));
@@ -86,6 +96,11 @@ class Connection extends Listenable() {
     }
 
 
+    /**
+     * handle a track that was added to the connection by the remote side
+     * @ignore
+     * @private
+     * */
     _handleIncomingTrack(track, streams) {
         const newStreams = [];
         if(track.kind === "audio"){
@@ -124,6 +139,11 @@ class Connection extends Listenable() {
         this.dispatchEvent('mediachanged', [{change: 'added', track, streams, newStreams, peer: this._peer, mid}]);
     }
 
+    /**
+     * @param {RTCIceCandidate} candidate A generated ice candidate address to transmit to the other side
+     * @ignore
+     * @private
+     * */
     _forwardIceCandidate(candidate) {
         if (candidate !== null) {
             this._signaler.send({
@@ -135,6 +155,11 @@ class Connection extends Listenable() {
         }
     }
 
+    /**
+     * start initiating an offer answer exchange by trying to lock the connection. If already logged and in an ongoing exchange, queue changes
+     * @ignore
+     * @private
+     * */
     async _initiateExchange() {
         if(this._locked){
             // do not try to lock an already locked connection again.
@@ -155,6 +180,12 @@ class Connection extends Listenable() {
         this.dispatchEvent('locked', []);
     }
 
+    /**
+     * handle an incoming signaling message
+     * @param {Object} msg The received message
+     * @ignore
+     * @private
+     * */
     async _handleSignallingMessage(msg) {
         // when someone else sent the message, it is obviously of none interest to the connection between the peer and us
         if(msg.sender !== this._peer) return;
@@ -181,6 +212,11 @@ class Connection extends Listenable() {
 
     }
 
+    /**
+     * handle lock by accepting, queuing own changes and wait or just wait for the other side to accept the lock
+     * @ignore
+     * @private
+     * */
     _handleLock(){
         if(this._locked){
             if(!this._isYielding){
@@ -204,6 +240,11 @@ class Connection extends Listenable() {
         });
     }
 
+    /**
+     * start adding transceivers and then initiate the offer answer exchange
+     * @ignore
+     * @private
+     * */
     async _startHandshake(){
         this.dispatchEvent('accept', []);
         // take everything queued and add it to the connection
@@ -221,10 +262,20 @@ class Connection extends Listenable() {
         if(this._verbose) this._logger.log(this._name, 'initiates offer-answer exchange');
     }
 
+    /**
+     * @ignore
+     * @private
+     * */
     async _handleRemoteIceCandidate(candidate) {
         if (candidate !== null) await this._connection.addIceCandidate(candidate);
     }
 
+    /**
+     * handle incoming sdp and resolve glare conflicts
+     * @param {RTCSessionDescriptionInit} description
+     * @ignore
+     * @private
+     * */
     async _handleSdp(description){
         if(description.type === 'offer'){
             await this._connection.setRemoteDescription(description);
@@ -252,6 +303,10 @@ class Connection extends Listenable() {
         }
     }
 
+    /**
+     * @ignore
+     * @private
+     * */
     _handleUnlock(){
         this._locked = false;
         if(this._verbose) this._logger.log(this._name, 'unlocking connection');
@@ -259,6 +314,10 @@ class Connection extends Listenable() {
         if(this._queued) this.dispatchEvent('lockneeded', []);
     }
 
+    /**
+     * @ignore
+     * @private
+     * */
     _addTrackToConnection(track, streams = []) {
         this._addedTracks.push(track);
         if (this._verbose) this._logger.log('add track to connection ' + this._id, track);
@@ -270,10 +329,11 @@ class Connection extends Listenable() {
     }
 
     /**
-     * @private
      * remove a transceiver for a track to a connection
      * Does not handle invalid or any kind of input, only the specified
      * track [MediaStreamTrack|string] the track or trackKind (a string equal to "video", "audio" or "*", case sensitive)
+     * @ignore
+     * @private
      * */
     _removeTrackFromConnection(track) {
         let removed = 0;
@@ -304,6 +364,7 @@ class Connection extends Listenable() {
     }
 
     /**
+     * @ignore
      * @private
      * */
     _stopReceiver(mid){
@@ -316,8 +377,9 @@ class Connection extends Listenable() {
     }
 
     /**
-     * @private
      * changes the additional information of a received track, if it does not find the track or something else is wrong, this method fails silently.
+     * @ignore
+     * @private
      * */
     _changeMetaOfTrack(mid, meta){
         const matches = this._connection.getTransceivers().filter(tr => tr.mid === mid);
@@ -331,6 +393,7 @@ class Connection extends Listenable() {
     }
 
     /**
+     * @ignore
      * @private
      * */
     _syncNewTransceivers(){
@@ -346,6 +409,12 @@ class Connection extends Listenable() {
         this._unboundTransceivers = this._unboundTransceivers.filter(tr => boundTransceivers.indexOf(tr) === -1);
     }
 
+    /**
+     * @param {MediaStreamTrack|string} searchTrack The track or kinds of tracks to replace
+     * @param {MediaStreamTrack|string} replacementTrack The replacement. If set to null, the track will be muted and nothing will be transmitted
+     * @ignore
+     * @private
+     * */
     _replaceTrack(searchTrack, replacementTrack) {
         const searchingActualTrack = searchTrack instanceof MediaStreamTrack;
         const searchingTrackKind = typeof searchTrack === "string" && (searchTrack === "audio" || searchTrack === "video" || searchTrack === '*');
@@ -362,7 +431,12 @@ class Connection extends Listenable() {
         })
     }
 
-
+    /**
+     * @param {MediaStreamTrack|string} track The track or kind of tracks to be muted
+     * @param {boolean} [muted=true] true for muting, false for un-muting a muted track
+     * @ignore
+     * @private
+     * */
     _muteTrack(track, muted=true){
         const searchingActualTrack = track instanceof MediaStreamTrack;
         const searchingTrackKind = typeof track === "string" && (['audio', 'video', '*'].indexOf(track) >= 0);
@@ -383,7 +457,10 @@ class Connection extends Listenable() {
         });
     }
 
-
+    /**
+     * @ignore
+     * @private
+     * */
     _handleIceChange() {
         // if the other side is away, close down the connection
         if (this._connection.iceConnectionState === "disconnected"){
@@ -400,10 +477,12 @@ class Connection extends Listenable() {
      * add media to the connection
      * @param trackOrKind [MediaStreamTrack|string] a track or its kind
      * @param streamsOrTransceiverConfig [Array|RTPTransceiverConfig]
+     * @ignore
      * */
     /**
      * add media to the connection
      * @param media [MediaStream|MediaStreamTrack|MediaStreamConstraints] a MediaStream, which tracks will be added, a single MediaStreamTrack, which will be added or the MediaStreamConstraints, which will be used to retrieve the local MediaStreamTracks
+     * @ignore
      * */
     async addMedia(media) {
         this.dispatchEvent('lockneeded', []);
@@ -433,6 +512,7 @@ class Connection extends Listenable() {
      * removes the given media from the connection
      * @param media [MediaStream|MediaStreamTrack|MediaStreamTrackKind|undefined]
      * allows to resume all media from the given stream or stream description ("audio" removing all tracks of kind audio, no argument or '*' removing all media)
+     * @ignore
      * */
     removeMedia(media) {
         this.dispatchEvent('lockneeded', []);
@@ -449,30 +529,37 @@ class Connection extends Listenable() {
     }
 
     /**
-     * @readonly
      * All non-muted received tracks of the given connection
+     * @ignore
+     * @readonly
      * */
     get tracks() {
         return this._receivedTracks;
     }
 
     /**
-     * @readonly
      * All active received streams of the given connection
+     * @ignore
+     * @readonly
      * */
     get streams() {
         return this._receivedStreams.filter(stream => stream.active);
     }
 
     /**
-     * @readonly
      * all locally added tracks of the given connection
+     * @ignore
+     * @readonly
      * */
     get addedTracks(){
         return this._addedTracks;
     }
 
 
+    /**
+     * @ignore
+     * @private
+     * */
     _handleClosingConnection() {
         if(this._verbose) this._logger.log('connection closing down');
         this._receivedTracks.forEach(track => track.stop());
@@ -482,6 +569,7 @@ class Connection extends Listenable() {
 
     /**
      * close the connection
+     * @ignore
      * */
     close() {
         const msg = {
@@ -497,6 +585,8 @@ class Connection extends Listenable() {
 
     /**
      * Is the connection closed or still open
+     * @ignore
+     * @readonly
      * */
     get closed() {
         return this._connection.connectionState === "closed" || this._connection.signalingState === "closed";

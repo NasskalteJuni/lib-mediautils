@@ -2,15 +2,24 @@ const Listenable = require('./Listenable.js');
 const Connection = require('./ConnectionWithRollback.js');
 
 /**
- * @class
  * Allows to manage a set of Connection {@link Connection}
+ * @class ConnectionManager
+ * @implements Listenable
+ * @implements MediaConsuming
  * */
 class ConnectionManager extends Listenable(){
 
     /**
      * create a new peer connection manager who handles everything related to transmitting media via RTCPeerConnections
+     * @param {Object} config
+     * @param {string} config.name The name or identifier of this peer
+     * @param {Signaler} signaler The Signaler to transmit messages to the server
+     * @param {Array} [iceServers=[]] An array of ice servers to use, in the common RTCIceServers-format
+     * @param {boolean} [useUnifiedPlan=true] Use of standard sdp. Set to false, Plan-B semantics are used but are not guaranteed to work on the given browser, therefore this is discouraged
+     * @param {boolean} [verbose=false] Any action or step in the connection process can be logged, if this flag is set to true
+     * @param {console} [logger=console] A logger that must offer the methods .log or .error. Only used in verbose mode, defaults to console
      * */
-    constructor({name = null, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, logger = console, isYielding = undefined} = {}){
+    constructor({name, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, logger = console, isYielding = undefined} = {}){
         super();
         this._signaler = signaler;
         this._verbose = verbose;
@@ -45,6 +54,10 @@ class ConnectionManager extends Listenable(){
         });
     }
 
+    /**
+     * forward the managed connections events by dispatching them on this object
+     * @private
+     * */
     _forwardEvents(connection){
         connection.addEventListener('mediachanged', e => this.dispatchEvent('mediachanged', [e]));
         connection.addEventListener('streamadded', (stream, track, mid) => this.dispatchEvent('streamadded', [stream, connection.peer, track, mid]));
@@ -55,47 +68,63 @@ class ConnectionManager extends Listenable(){
     }
 
     /**
-     * @readonly
      * the ids of the registered / known users as a list
+     * @readonly
      * */
     get users(){
         return Object.keys(this.connections);
     }
 
     /**
-     * @param id [string] the id of the user
-     * @return [Connect|null] a connection or null, if none exists at the time
+     * @param {string} id The id of the user
+     * @return {Connection} A connection or null, if none exists at the time
      * */
     get(id){
         return this.connections[id] || null;
     }
 
     /**
-     * @readonly
      * get all remote media streams
-     * @returns Array of MediaStreams
+     * @readonly
+     * @returns {Array} The complete list of MediaStreams that peers sent to this connection
      * */
-    get remoteMediaStreams(){
-        return Object.values(this.connections).map(connection => connection.streams || []).reduce((all, streams) => all.concat(streams));
+    get streams(){
+        return Object.values(this.connections).map(connection => connection.streams.length ? connection.streams : []).reduce((all, streams) => all.concat(streams), []);
     }
 
     /**
-     * adds media to the connections
+     * get all remote media stream tracks
+     * @readonly
+     * @returns {Array} The complete list of MediaStreamTracks that peers sent to this connection
      * */
-    addMedia(media){
-        if(media instanceof MediaStream){
+    get tracks(){
+        return Object.values(this.connections).map(connection => connection.tracks.length ? connection.tracks : []).reduce((all, tracks) => all.concat(tracks),[]);
+    }
+
+    /**
+     * adds media to the (already existing and newly created) connections
+     * @param {MediaStream|MediaStreamTrack} m the media to add. Can be a Stream or just a single Track
+     * */
+    addMedia(m){
+        if(m instanceof MediaStream){
             if(this._verbose) this._logger.log('added media stream');
-            this.localMediaStreams.push(media);
-            Object.values(this.connections).forEach(con => con.addMedia(media));
-        }else{
+            this.localMediaStreams.push(m);
+            Object.values(this.connections).forEach(con => con.addMedia(m));
+        }else if(m instanceof MediaStreamTrack){
             if(this._verbose) this._logger.log('added media stream track');
-            const stream = new MediaStream([media]);
+            const stream = new MediaStream([m]);
             this.localMediaStreams.push(stream);
-            Object.values(this.connections).forEach(con => con.addMedia(media));
+            Object.values(this.connections).forEach(con => con.addMedia(m));
+        }else{
+            this._logger.error('unknown media type',typeof m, m);
         }
     }
 
-    removeMedia(){
+    /**
+     * removes media from all connections
+     * @param {MediaStream|MediaStreamTrack|string} [m] Remove the given media. If called without media or with '*', every media that was added is removed
+     * */
+    removeMedia(m){
         if(arguments.length === 0){
             if(this._verbose) this._logger.log('removed all media');
             this.localMediaStreams = [];
@@ -107,13 +136,12 @@ class ConnectionManager extends Listenable(){
         }
     }
 
+    /**
+     * closes all connections
+     * */
     close(){
         this._signaler.close();
         Object.values(this.connections).forEach(con => con.close());
-    }
-
-    forEach(fn){
-        Object.values(this.connections).forEach(fn);
     }
 
 }

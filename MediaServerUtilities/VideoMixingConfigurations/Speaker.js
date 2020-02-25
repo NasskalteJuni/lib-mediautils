@@ -1,7 +1,18 @@
 const VideoMixingConfiguration = require('../VideoMixingConfiguration');
 
+/**
+ * A video mixing configuration that shows the current speaker as a big background image and other participants in little images on the bottom.
+ * Also indicates if someone is speaking right now
+ * @extends VideoMixingConfiguration
+ * @class
+ * */
 class Speaker extends VideoMixingConfiguration{
 
+    /**
+     * @param {SpeechDetection} speechDetection A speechDetection object to use to determine who is speaking right now. The media to detect must be added to the speech detection
+     * @param {Number} [priority=0] The priority of this config
+     * @param {Boolean} [applicable=true] if this config is usable. Should work with every number of conference members, therefore defaults to true
+     * */
     constructor(speechDetection, priority = 0, applicable = true){
         // check if the given id is speaking now, or if everyone is silent
         const silenceOffset = 2;

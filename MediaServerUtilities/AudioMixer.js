@@ -1,6 +1,7 @@
 /**
- * @class
  * Intended to blend together multiple audio tracks to one single track
+ * @class
+ * @implements MediaConsuming
  * */
 class AudioMixer{
 
@@ -14,18 +15,16 @@ class AudioMixer{
     }
 
     /**
-     * the mixed stream
+     * the mixed MediaStream
      * @readonly
-     * @return MediaStream
      * */
     get out(){
         return this._out.stream;
     }
 
     /**
-     * the mixed track
+     * the mixed MediaStreamTrack
      * @readonly
-     * @return MediaStreamTrack
      * */
     get outputTrack(){
         return this._out.stream.getAudioTracks()[0];
@@ -33,23 +32,23 @@ class AudioMixer{
 
     /**
      * add media into the mixing process
-     * @param media [MediaStream|MediaStreamTrack] media to mix
-     * @param id [string=media.id] a unique identifier for the given media
+     * @param {MediaStream|MediaStreamTrack} m The media to mix. A given stream should contain exactly 1 audio track, a given track should be of kind audio
+     * @param id [string=m.id] a unique identifier for the given media
      * */
-    addMedia(media, id) {
-        if(arguments.length === 1) id = media.id;
-        if(media instanceof MediaStreamTrack) media = new MediaStream([media]);
-        this._in[id] = this._context.createMediaStreamSource(media);
+    addMedia(m, id) {
+        if(arguments.length === 1) id = m.id;
+        if(m instanceof MediaStreamTrack) m = new MediaStream([m]);
+        this._in[id] = this._context.createMediaStreamSource(m);
         this._rebuildGraph();
     }
 
     /**
      * removes media from the mixing process
-     * @param id [string|MediaStream|MediaStreamTrack] the id of the added media or the media itself
+     * @param {string|MediaStream|MediaStreamTrack} m The media to remove. Either a stream, a track or the identifier that was used to add the track
      * */
-    removeMedia(id){
-        if(arguments[0] instanceof MediaStream || arguments[0] instanceof MediaStreamTrack) id = arguments[0].id;
-        delete this._in[id];
+    removeMedia(m){
+        if(arguments[0] instanceof MediaStream || arguments[0] instanceof MediaStreamTrack) m = arguments[0].id;
+        delete this._in[m];
         this._rebuildGraph();
     }
 
@@ -68,7 +67,7 @@ class AudioMixer{
     /**
      * stop the audio mixer and free used resources
      * */
-    stop(){
+    close(){
         this._context.close()
     }
 
