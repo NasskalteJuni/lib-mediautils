@@ -36,7 +36,7 @@ class AudioMixer{
      * @param media [MediaStream|MediaStreamTrack] media to mix
      * @param id [string=media.id] a unique identifier for the given media
      * */
-    addStream(media, id) {
+    addMedia(media, id) {
         if(arguments.length === 1) id = media.id;
         if(media instanceof MediaStreamTrack) media = new MediaStream([media]);
         this._in[id] = this._context.createMediaStreamSource(media);
@@ -47,7 +47,7 @@ class AudioMixer{
      * removes media from the mixing process
      * @param id [string|MediaStream|MediaStreamTrack] the id of the added media or the media itself
      * */
-    removeStream(id){
+    removeMedia(id){
         if(arguments[0] instanceof MediaStream || arguments[0] instanceof MediaStreamTrack) id = arguments[0].id;
         delete this._in[id];
         this._rebuildGraph();

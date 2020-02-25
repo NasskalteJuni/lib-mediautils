@@ -53,16 +53,16 @@
         getWebcam.then(stream => {
             mixer.addStream(stream, 'webcam');
             mixer.addStream(fakeWebcam.out, 'fake-webcam');
-            speechDetection.addStream(stream, 'webcam');
-            speechDetection.addStream(fakeWebcam.out, 'fake-webcam');
+            speechDetection.addMedia(stream, 'webcam');
+            speechDetection.addMedia(fakeWebcam.out, 'fake-webcam');
             display.srcObject = mixer.out;
         });
         window.addEventListener('click', () => {
             const noise = new window.MediaUtilities.PlaceHolderMediaGenerator({enable: true});
             mixer.addStream(noise.videoTrack, 'noise');
-            speechDetection.addStream(noise.audioTrack,'noise');
+            speechDetection.addMedia(noise.audioTrack,'noise');
             const t =window.setTimeout(() => {
-                speechDetection.removeStream('noise');
+                speechDetection.removeMedia('noise');
                 mixer.removeStream('noise');
                 clearTimeout(t);
             }, 3000);

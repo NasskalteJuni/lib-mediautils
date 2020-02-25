@@ -123,31 +123,36 @@ class SpeechDetection extends Listenable(){
 
     /**
      * add media to the current detection process. you can pass in the media(stream or track) itself or its identifier
-     * @param media [MediaStream|MediaStreamTrack] a stream or track to add (stream must contain at least one audio track)
+     * @param m [MediaStream|MediaStreamTrack] a stream or track to add (stream must contain at least one audio track)
      * @param id [string=media.id] an id to reference the media and its results
      * */
-    addStream(media, id){
-        if(arguments.length === 1) id = media.id;
-        if(media instanceof MediaStreamTrack) media = new MediaStream([media]);
+    addMedia(m, id){
+        if(arguments.length === 1) id = m.id;
+        if(m instanceof MediaStreamTrack) m = new MediaStream([m]);
         const analyzer = this._context.createAnalyser();
         analyzer.fftSize = 512;
         analyzer.smoothingTimeConstant = this._smoothingConstant;
         const fftBins = new Float32Array(analyzer.frequencyBinCount);
-        const source = this._context.createMediaStreamSource(media);
+        const source = this._context.createMediaStreamSource(m);
         source.connect(analyzer);
-        this._in[id] = {analyzer, fftBins, source, stream: media};
+        this._in[id] = {analyzer, fftBins, source, stream: m};
     }
 
     /**
-     * removes the given media. you can pass in the media (stream or track) itself or its identifier
-     * @param id [MediaStream|MediaStreamTrack|string] the media to remove
+     * Removes the given media. You can pass in the media (stream or track) itself or its identifier.
+     * If call this method without any argument or with '*', it will remove any added media
+     * @param m [MediaStream|MediaStreamTrack|string] the media to remove
      * */
-    removeStream(id){
-        if(arguments[0] instanceof MediaStream || arguments[0] instanceof MediaStreamTrack) id = arguments[0].id;
-        delete this._in[id];
-        delete this._out[id];
-        this._lastSpeakers = this._lastSpeakers.filter(s => s !== id);
-        if(this._lastSpeaker === id) {
+    removeMedia(m){
+        if(arguments.length === 0 || m === '*') return Object.keys(this._in).forEach(id => this.removeMedia(id));
+        if(arguments[0] instanceof MediaStream || arguments[0] instanceof MediaStreamTrack){
+            const matching = Object.keys(this._in).filter(id => this._in[id].stream.getTracks()[0].id === m.id || this._in[id].stream.id === m.id);
+            if(matching.length) m = matching[0];
+        }
+        delete this._in[m];
+        delete this._out[m];
+        this._lastSpeakers = this._lastSpeakers.filter(s => s !== m);
+        if(this._lastSpeaker === m) {
             if(this._lastSpeakers.length) this._lastSpeaker = this._lastSpeakers.indexOf(this._lastSpeaker)  >= 0 ? this._lastSpeaker : this._lastSpeakers[0];
             else this._lastSpeaker = null;
         }

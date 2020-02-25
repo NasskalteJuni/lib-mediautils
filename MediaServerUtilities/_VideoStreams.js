@@ -1,5 +1,4 @@
 /**
- * @mixin
  * Handle Video Streams
  * */
 module.exports = (superclass=Object) => class C extends superclass{
@@ -15,7 +14,7 @@ module.exports = (superclass=Object) => class C extends superclass{
      * @param m the MediaStream object to manage
      * @param id the unique identifier used for the mediaStream (useful for removal, custom grids, etc.). Defaults to the media stream id
      * */
-    addStream(m, id){
+    addMedia(m, id){
         if(arguments.length === 1) id = m.id;
         if(m instanceof MediaStreamTrack) m = new MediaStream([m]);
         const helper = document.createElement('video');
@@ -33,12 +32,16 @@ module.exports = (superclass=Object) => class C extends superclass{
 
     /**
      * removes a MediaStream from the mixing process
-     * @param id [string|MediaStream|MediaStreamTrack] the id used to add the media stream. If the media stream was added without id, you have to pass in the stream or track that was added
+     * @param m [string|MediaStream|MediaStreamTrack] the id used to add the media stream. If the media stream was added without id, you have to pass in the stream or track that was added
      * @throws Error when there is no stream with the given id
      * */
-    removeStream(id){
-        if(id instanceof MediaStream || id instanceof MediaStreamTrack) id = id.id;
-        delete this._streams[id];
+    removeMedia(m){
+        if(arguments.length === 0) return this.streamIds().forEach(id => this.removeMedia(id));
+        if(m instanceof MediaStream || m instanceof MediaStreamTrack){
+            const matching = this.streamIds().filter(id => this._streams[id].srcObject.id === m.id || this._streams[id].srcObject.getTracks[0].id === m.id);
+            if(matching.length) m = matching[0];
+        }
+        delete this._streams[m];
         this._onStreamChangeHandler(this.streamIds());
     }
 
