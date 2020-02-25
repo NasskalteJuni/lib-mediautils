@@ -41,7 +41,7 @@
         const fps = 15;
         // create a speechDetection (bind to window for easier inspection)
         window.speechDetection = new MediaUtilities.SpeechDetection({threshold: -60, smoothingConstant: 0.2, requiredSamplesForSpeech: 5});
-        speechDetection.onSpeakerChange(speakers => console.log(speakers));
+        speechDetection.addEventListener('speekerchange', speakers => console.log(speakers));
         const speaker = new MediaUtilities.VideoMixingConfigurations.Speaker(speechDetection);
         // create a new video mixer (global for easier inspection) and pass desired options
         window.mixer = new MediaUtilities.VideoMixer({fps, width: 640, height: 480});
@@ -51,21 +51,23 @@
         // add the streams to use. for this test, just use the webcam
         const getWebcam = navigator.mediaDevices.getUserMedia({video: true, audio: true});
         getWebcam.then(stream => {
-            mixer.addStream(stream, 'webcam');
-            mixer.addStream(fakeWebcam.out, 'fake-webcam');
+            mixer.addMedia(stream, 'webcam');
+            mixer.addMedia(fakeWebcam.out, 'fake-webcam');
             speechDetection.addMedia(stream, 'webcam');
             speechDetection.addMedia(fakeWebcam.out, 'fake-webcam');
             display.srcObject = mixer.out;
         });
-        window.addEventListener('click', () => {
-            const noise = new window.MediaUtilities.PlaceHolderMediaGenerator({enable: true});
-            mixer.addStream(noise.videoTrack, 'noise');
-            speechDetection.addMedia(noise.audioTrack,'noise');
-            const t =window.setTimeout(() => {
-                speechDetection.removeMedia('noise');
-                mixer.removeStream('noise');
-                clearTimeout(t);
-            }, 3000);
+        window.addEventListener('keyup', e => {
+            if(e.key === "Enter"){
+                const noise = new window.MediaUtilities.PlaceHolderMediaGenerator({enable: true});
+                mixer.addMedia(noise.videoTrack, 'noise');
+                speechDetection.addMedia(noise.audioTrack,'noise');
+                const t =window.setTimeout(() => {
+                    speechDetection.removeMedia('noise');
+                    mixer.removeMedia('noise');
+                    clearTimeout(t);
+                }, 3000);
+            }
         })
         // done
     });

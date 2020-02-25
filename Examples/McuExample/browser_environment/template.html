@@ -23,28 +23,28 @@
         });
         connections.addEventListener('userdisconnected', user => {
             delete window.audioMixer[user];
-            videoMixer.removeStream(user);
+            videoMixer.removeMedia(user);
             speechDetection.removeMedia(user);
         });
         connections.addEventListener('trackadded', (track, user) => {
             if(track.kind === "video"){
-                videoMixer.addStream(track, user);
+                videoMixer.addMedia(track, user);
             }
             if(track.kind === "audio"){
                 speechDetection.addMedia(track, user);
                 Object.keys(audioMixers).forEach(u => {
-                    if(user !== u) audioMixers[u].addStream(track, user);
+                    if(user !== u) audioMixers[u].addMedia(track, user);
                 });
             }
         });
         connections.addEventListener('trackremoved', (track, user) => {
             if(track.kind === "video"){
-                videoMixer.removeStream(track, user);
+                videoMixer.removeMedia(track, user);
             }
             if(track.kind === "audio"){
                 speechDetection.removeMedia(track, user);
                 Object.keys(audioMixers).forEach(u => {
-                    if(user !== u) audioMixers[u].removeStream(track, user);
+                    if(user !== u) audioMixers[u].removeMedia(track, user);
                 });
             }
         });

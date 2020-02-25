@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <title>Glare</title>
-    <script src="../../dist/bundle.min.js"></script>
+    <script src="../../dist/mediautils.js"></script>
     <script src="./LocalSignalerMock.js">
     </script>
 </head>
 <body>
 <button id="start">try generating glare</button>
 <script>
-    const a = new MediaUtilities.Connect({peer: 'b', name: 'a', verbose: true, signaller: signaller({self: 'a', peer: 'b'})});
-    const b = new MediaUtilities.Connect({peer: 'a', name: 'b', verbose: true, signaller: signaller({self: 'b', peer: 'a'})});
+    const a = new MediaUtilities.Connection({peer: 'b', name: 'a', verbose: true, signaler: signaler({self: 'a', peer: 'b'})});
+    const b = new MediaUtilities.Connection({peer: 'a', name: 'b', verbose: true, signaler: signaler({self: 'b', peer: 'a'})});
     a.addEventListener('streamadded', (stream) => {
         console.log(stream, stream.active);
         const video = document.createElement('video');

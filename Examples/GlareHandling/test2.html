@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Glare Test</title>
-    <script src="../../dist/bundle.min.js"></script>
+    <script src="../../dist/mediautils.js"></script>
     <script src="./LocalSignalerMock.js"></script>
     <script src="./createRandomMediaStream.js"></script>
     <style>
@@ -24,12 +24,12 @@
         let stream = null;
         const peers = {
             a: {
-                connect: new MediaUtilities.Connect({peer: 'b', name: 'a', signaller: signaller({peer: 'b', self: 'a'}), verbose}),
+                connect: new MediaUtilities.Connection({peer: 'b', name: 'a', signaler: signaler({peer: 'b', self: 'a'}), verbose}),
                 sent: 0,
                 received: 0
             },
             b: {
-                connect: new MediaUtilities.Connect({peer: 'a', name: 'b', signaller: signaller({peer: 'a', self: 'b'}), verbose}),
+                connect: new MediaUtilities.Connection({peer: 'a', name: 'b', signaler: signaler({peer: 'a', self: 'b'}), verbose}),
                 sent: 0,
                 received: 0,
             }

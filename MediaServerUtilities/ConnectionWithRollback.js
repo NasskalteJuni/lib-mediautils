@@ -408,7 +408,7 @@ class Connection extends Listenable() {
         } else {
             if (media instanceof MediaStream) {
                 media.getTracks().forEach(track => {
-                    if(stream.meta) track.meta = stream.meta;
+                    if(media.meta) track.meta = media.meta;
                     this._addTrackToConnection(track, [media])
                 });
             } else if (media instanceof MediaStreamTrack) {

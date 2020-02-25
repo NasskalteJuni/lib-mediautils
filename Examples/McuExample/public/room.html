@@ -22,8 +22,9 @@
         const mcu = new MediaUtilities.Connection({id: name, name, peer: '@mcu', isYielding: false, signaler, verbose: true, logger: console});
         mcu.addEventListener('streamadded', stream => document.getElementById("display").srcObject = stream);
         const updateUserList = () => document.getElementById("list").innerText = peers.join(',');
-        document.getElementById("media").addEventListener("click", e => {
-            mcu.addMedia({video: true, audio: true});
+        document.getElementById("media").addEventListener("click", async e => {
+            const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+            mcu.addMedia(stream);
             e.target.parentNode.removeChild(e.target);
         });
         signaler.addEventListener("message", msg => {

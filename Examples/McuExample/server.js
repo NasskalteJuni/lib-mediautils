@@ -1,8 +1,7 @@
 const express = require('express');
 const path = require('path');
 const app = express();
-const config = require('./config.js');
-const port = process.argv.slice(2).pop() || process.env.port || config.port || 8808;
+const port = process.argv.slice(2).pop() || process.env.port || 4000;
 const sockets = require('./sockets.js');
 app.use(require('./middleware/sendStatusMessage.js'));
 app.use(express.static(__dirname+'/public'));
