@@ -23,7 +23,14 @@ module.exports = (superclass=Object) => class C extends superclass{
         helper.srcObject = m;
         helper.style.visibility = "hidden";
         helper.style.pointerEvents = "none";
-        helper.style.position = "absolute";
+        helper.style.position = "fixed";
+        helper.style.left = "0";
+        helper.style.top = "0";
+        helper.style.width = "1px";
+        helper.style.height = "1px";
+        helper.width = 1;
+        helper.height = 1;
+        helper.setAttribute('playsinline', '');
         helper.addEventListener('pause', () => helper.play());
         document.body.appendChild(helper);
         this._streams[id] = helper;
