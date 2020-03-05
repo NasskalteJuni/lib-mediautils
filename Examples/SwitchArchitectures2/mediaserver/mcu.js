@@ -3,22 +3,24 @@
 const signaler = MediaUtilities.wrapTunnelAsSignaler(Tunnel);
 const connections = new MediaUtilities.ConnectionManager({name: '@mcu', isYielding: true, verbose: false, signaler});
 const videoMixer = new MediaUtilities.VideoMixer({width: 640, height: 480});
+const speechDetection = new MediaUtilities.SpeechDetection();
 const audioMixers = {};
-videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Line(0, true), 'line');
-videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Grid(1, ids => [4,6,8,9,10].indexOf(ids.length) >= 0), 'grid');
+videoMixer.addConfig(new MediaUtilities.VideoMixingConfigurations.Speaker(speechDetection), 'Speaker');
 
 
 // listen for received streams, then, forward the received streams to everyone else
 connections.addEventListener('streamadded', (stream, user) => {
     console.log('stream added for', user, stream);
-    videoMixer.addStream(stream, user+'-'+stream.id);
-    Object.keys(audioMixers).filter(key => user !== key).forEach(key => audioMixers[key].addStream(stream,user+'-'+stream.id));
+    videoMixer.addMedia(stream, user);
+    speechDetection.addMedia(stream, user);
+    Object.keys(audioMixers).filter(key => user !== key).forEach(key => audioMixers[key].addMedia(stream,user));
 });
 // when a stream ends / is removed, stop forwarding it
 connections.addEventListener('streamremoved', (stream, user) => {
     console.log('stream removed for', user, stream);
-    videoMixer.removeStream(user+'-'+stream.id);
-    Object.keys(audioMixers).filter(key => user !== key).forEach(key => audioMixers[key].removeStream(user+'-'+stream.id));
+    videoMixer.removeMedia(user);
+    speechDetection.removeMedia(user);
+    Object.keys(audioMixers).filter(key => user !== key).forEach(key => audioMixers[key].removeMedia(user));
 });
 // every user has his own audio mixer
 connections.addEventListener('userconnected', (user) => {
@@ -28,4 +30,19 @@ connections.addEventListener('userconnected', (user) => {
 // which will be removed when the user disconnects
 connections.addEventListener('userdisconnected', (user) => {
     delete audioMixers[user];
+    Object.values(audioMixers).forEach(audioMixer => audioMixer.removeMedia(user));
+    videoMixer.removeMedia(user);
+    speechDetection.removeMedia(user);
 });
+signaler.addEventListener('message', message => {
+    if(message.type === "shutdown" && message.sender === "@server"){
+        connections.close();
+        videoMixer.removeMedia();
+        Object.keys(audioMixers).forEach(user => {
+            audioMixers[user].removeMedia();
+            delete audioMixers[user];
+        });
+        speechDetection.removeMedia();
+        document.body.innerHTML = "";
+    }
+})

@@ -12,16 +12,24 @@ class Architecture extends Listenable(){
 
     next(){
         const previous = this._architecture;
-        this._architecture = floormod(architectures.indexOf(architecture) + 1, architectures.length);
+        this._architecture = this.nextValue();
         this.dispatchEvent("architecture:next", [this._architecture, previous]);
         this.dispatchEvent("architecture:switch", [this._architecture, previous]);
     }
 
+    nextValue(){
+        return architectures[floormod(architectures.indexOf(this._architecture) + 1, architectures.length)];
+    }
+
     prev(){
         const previous = this._architecture;
-        this._architecture = floormod(architectures.indexOf(architecture) - 1, architectures.length);
+        this._architecture = this.prevValue();
         this.dispatchEvent("architecture:prev", [this._architecture, previous]);
         this.dispatchEvent("architecture:switch", [this._architecture, previous]);
+    }
+
+    prevValue(){
+        return architectures[floormod(architectures.indexOf(this._architecture) - 1, architectures.length)];
     }
 
     set value(architecture){

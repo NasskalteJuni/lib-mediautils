@@ -35,37 +35,31 @@
         container.appendChild(ul);
     }
 
-    function addSwitchButton(){
+    function addSwitchButton(conference){
         const button = document.createElement('button');
         button.id = 'changearchitecture';
         button.innerText = 'change architecture (currently '+conference.architecture+')';
-        button.addEventListener('click', () => {
-            const switchToArchitecture = architecture === 'mesh' ? 'mcu' : 'mesh';
-            signaler.send({type: 'architecture:change', receiver: '@server', data: switchToArchitecture, sent: new Date().toISOString()});
-        });
+        button.addEventListener('click', () => conference.switchArchitecture());
+        conference.addEventListener('architectureswitched', architecture => button.innerText = 'change architecture (currently '+architecture+')');
         document.querySelector('main').appendChild(button);
     }
 </script>
 <script>
+    const display = document.getElementById('display');
     const name = new URLSearchParams(location.search).get('user');
     let architecture = 'mesh';
     let cam = null;
     const verbose = true;
     const signaler = new MediaUtilities.Signaler({endpoint: location.origin.replace(/^http/,'ws')});
-    const conference = new MediaUtilities.Conference({signaler, verbose});
+    const conference = new MediaUtilities.Conference({name, signaler, verbose});
     const addMediaButton = document.getElementById("addMedia");
+    conference.displayOn(display);
     conference.addEventListener('userconnected', () => updateUserList(conference.members))
     conference.addEventListener('userdisconnected', () => updateUserList(conference.members));
-    conference.addEventListener('architectureswitched', architecture => {
-        const b = document.getElementById('changearchitecture');
-        if(b) b.innerText = 'change architecture (currently '+architecture+')';
-    });
     addMediaButton.addEventListener("click", async () => {
         cam = conference.addWebcam({video: {width: {exact: 640}, height: {exact: 480}}, audio: true});
         addMediaButton.parentNode.removeChild(addMediaButton);
-        // yeah, we have to make an autoplay-video play. If not muted, autoplay isn't allowed in chrome
-        if(display.paused) display.play();
-        addSwitchButton();
+        addSwitchButton(conference);
     });
     window.addEventListener('beforeunload', () => connections.close());
 </script>

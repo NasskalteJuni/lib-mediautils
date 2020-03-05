@@ -82,6 +82,7 @@ class BrowserEnvironment extends Listenable(){
             this._isInitialized = true;
             this._onInitializedCb();
             this.dispatchEvent('initialized');
+            return this;
         } catch (err) {
             this._errorHandler(err);
             this.dispatchEvent('error');

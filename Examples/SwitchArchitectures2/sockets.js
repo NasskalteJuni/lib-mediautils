@@ -1,26 +1,25 @@
 const Socket = require('faye-websocket');
 const session = require('./session.js');
-const mcu = require('./mcu.js');
+const mediaServer = require('./mediaserver.js');
 const sockets = {};
 const broadcast = (msg, exclude=[]) => Object.keys(sockets).filter(user => exclude.indexOf(user) === -1).forEach(receiver => sockets[receiver].send(JSON.stringify(msg)));
-const timestamp = () => new Date().toISOString();
 let architecture = 'mesh';
 
 // handle mcu communication
-const handleMcuToSocketCommunication = () => {
-    mcu.Tunnel.onExport(function(msg){
+const connectServerToSocket = (type) => mediaServer[type].addEventListener('initialized', () => {
+    mediaServer[type].Tunnel.onExport(function(msg){
         const socket = sockets[msg.receiver];
         if(socket){
-            msg.sender = "@mcu";
+            msg.sender = "@"+type;
             socket.send(JSON.stringify(msg));
         }else{
             // inform the mcu that by now, no socket for that user exists any more and therefore, drop the user
-            mcu.Tunnel.doImport({type: 'user:disconnected', receiver: '@mcu', sender: '@server', sent: timestamp(), transmitted: timestamp()});
+            mediaServer[type].Tunnel.doImport({type: 'user:disconnected', receiver: '@'+type, sender: '@server'});
         }
     });
-};
-if(mcu.isInitialized) handleMcuToSocketCommunication();
-else mcu.addEventListener('initialized', handleMcuToSocketCommunication);
+});
+connectServerToSocket('mcu');
+connectServerToSocket('sfu');
 
 // handle normal user browser web socket communication
 module.exports = server => server.on('upgrade', (req, sock, body) => {
@@ -30,14 +29,14 @@ module.exports = server => server.on('upgrade', (req, sock, body) => {
             const user = req.session.user;
             if(sockets[user]) sockets[user].close();
             let ws = new Socket(req, sock, body);
-            const error = msg => ws.send(JSON.stringify({type: 'error', sender: '@server', receiver: user, data: msg, sent: timestamp(), transmitted: timestamp()}));
+            const error = msg => ws.send(JSON.stringify({type: 'error', sender: '@server', receiver: user, data: msg}));
             sockets[user] = ws;
 
-            mcu.Tunnel.doImport('message', {type: 'user:connected', data: user, sender: '@server', receiver: '@mcu', sent: timestamp(), transmitted: timestamp()});
-            broadcast({type: 'user:connected', sender: '@server', data: user, receiver: '*', sent: timestamp(), transmitted: timestamp()}, [user]);
-            ws.send(JSON.stringify({type: 'architecture:change', sender: '@server', data: architecture, receiver: user, sent: new Date().toISOString(), transmitted: new Date().toISOString()}));
-            ws.send(JSON.stringify({type: 'user:list', sender: '@server', data: Object.keys(sockets).filter(u => u !== user), receiver: user, sent: timestamp(), transmitted: timestamp()}));
-
+            mediaServer.mcu.Tunnel.doImport('message', {type: 'user:connected', data: user, sender: '@server', receiver: '@mcu'});
+            mediaServer.sfu.Tunnel.doImport('message', {type: 'user:connected', data: user, sender: '@server', receiver: '@sfu'});
+            broadcast({type: 'user:connected', sender: '@server', data: user, receiver: '*'}, [user]);
+            ws.send(JSON.stringify({type: 'architecture:switch', sender: '@server', data: architecture, receiver: user}));
+            ws.send(JSON.stringify({type: 'user:list', sender: '@server', data: Object.keys(sockets).filter(u => u !== user), receiver: user}));
             ws.on('message', function(event) {
                 let msg = JSON.parse(event.data);
                 msg = JSON.parse(msg);
@@ -51,19 +50,21 @@ module.exports = server => server.on('upgrade', (req, sock, body) => {
                     return error('Invalid msg type: reserved category user');
                 }
                 msg.sender = user;
-                msg.transmitted = new Date().toISOString();
                 if(msg.receiver === '@server') {
-                    if(msg.type === 'architecture:change'){
+                    if(msg.type === 'architecture:switch'){
+                        console.log(msg);
                         msg.data = msg.data.toLowerCase();
                         if(['mcu','mesh','sfu'].indexOf(msg.data) === -1) error('unknown architecture type '+msg.data);
-                        if(architecture === msg.data) return ws.send(JSON.stringify({receiver: user, sender: '@server', type: 'architecture:change', data: msg.data, sent: timestamp(), transmitted: timestamp()}))
+                        if(architecture === msg.data) return ws.send(JSON.stringify({receiver: user, sender: '@server', type: 'architecture:switch', data: msg.data}))
                         architecture = msg.data;
                         msg.sender = '@server';
+                        if(architecture !== 'sfu') mediaServer.sfu.Tunnel.doImport('message', {type: 'shutdown', receiver: '@sfu', sender: '@server', data: ''});
                         broadcast(msg);
-                        mcu.Tunnel.doImport('architecture', msg.data);
                     }
                 }else if(msg.receiver === '@mcu'){
-                    mcu.Tunnel.doImport('message', msg);
+                    mediaServer.mcu.Tunnel.doImport('message', msg);
+                }else if(msg.receiver === '@sfu'){
+                    mediaServer.sfu.Tunnel.doImport('message', msg);
                 }else if(msg.receiver) {
                     if (sockets[msg.receiver]) sockets[msg.receiver].send(JSON.stringify(msg));
                     else error('user away');
@@ -73,8 +74,9 @@ module.exports = server => server.on('upgrade', (req, sock, body) => {
             });
 
             ws.on('close', function(event) {
-                mcu.Tunnel.doImport('message', {type: 'user:disconnected', data: user, sender: '@server', receiver: '@mcu', sent: timestamp(), transmitted: timestamp()});
-                broadcast({type:'user:disconnected', data: user, sender: '@server', receiver: '*', sent: timestamp(), transmitted: timestamp()});
+                mediaServer.mcu.Tunnel.doImport('message', {type: 'user:disconnected', data: user, sender: '@server', receiver: '@mcu'});
+                mediaServer.sfu.Tunnel.doImport('message', {type: 'user:disconnected', data: user, sender: '@server', receiver: '@sfu'});
+                broadcast({type:'user:disconnected', data: user, sender: '@server', receiver: '*'});
                 sockets[user] = null;
                 delete sockets[user];
                 ws = null;

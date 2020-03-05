@@ -138,10 +138,15 @@ class ConnectionManager extends Listenable(){
 
     /**
      * closes all connections
+     * @param {Boolean} [remove=false] flag used to remove connections when closing them. Defaults to keeping the closed connections
      * */
-    close(){
+    close(remove=false){
         this._signaler.close();
-        Object.values(this.connections).forEach(con => con.close());
+        Object.keys(this.connections)
+            .forEach(user => {
+                this.connections[user].close();
+                if(remove) delete this.connections[user];
+            });
     }
 
 }

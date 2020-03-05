@@ -12,5 +12,7 @@ module.exports = tunnel => ({
         tunnel.onImport('message', function(data){
             cb(data);
         });
-    }
+    },
+    close(){},
+    closed: false
 });

@@ -80,6 +80,7 @@ class Connection extends Listenable() {
         this._connection.addEventListener('icecandidate', e => this._forwardIceCandidate(e.candidate));
         this._connection.addEventListener('negotiationneeded', () => this._startHandshake());
         this._connection.addEventListener('iceconnectionstatechange', () => this._handleIceChange());
+        this._connection.addEventListener('connectionstatechange', () => this._restartJammedConnectionAttempts());
         this._connection.addEventListener('track', ({track, streams}) => this._handleIncomingTrack(track, streams));
         this._connection.addEventListener('signalingstatechange', () => this._syncNewTransceivers());
         if (this._verbose) this._logger.log('created new peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
@@ -184,7 +185,6 @@ class Connection extends Listenable() {
                 receiver: this._peer,
                 data: offer,
                 type: 'sdp',
-                sent: timestamp()
             };
             this._signaler.send(msg);
         }catch(err){
@@ -199,7 +199,13 @@ class Connection extends Listenable() {
      * @private
      * */
     async _handleRemoteIceCandidate(candidate) {
-        if (candidate !== null) await this._connection.addIceCandidate(candidate);
+        if (candidate !== null){
+            try{
+                await this._connection.addIceCandidate(candidate);
+            }catch(err){
+                if(!this._ignoredOffer) throw err;
+            }
+        }
     }
 
     /**
@@ -239,12 +245,14 @@ class Connection extends Listenable() {
         const boundTransceivers = [];
         if(this._connection.signalingState === "stable"){
             this._unboundTransceivers.forEach((transceiver, index) => {
-               const binding = this._connection.getTransceivers().filter(tr => tr === transceiver);
-               if(binding.length){
-                   const bound = binding[0];
-                   boundTransceivers.push(bound);
-                   if(bound.sender.track && bound.sender.track.meta) this._signaler.send({type: "track:meta", data: {mid: bound.mid, meta: bound.sender.track.meta}, receiver: this._peer});
-               }
+                if(transceiver.mid !== null){
+                    const binding = this._connection.getTransceivers().filter(tr => tr === transceiver);
+                    if(binding.length){
+                        const bound = binding[0];
+                        boundTransceivers.push(bound);
+                        if(bound.sender.track && bound.sender.track.meta) this._signaler.send({type: "track:meta", data: {mid: bound.mid, meta: bound.sender.track.meta}, receiver: this._peer});
+                    }
+                }
             });
         }
         this._unboundTransceivers = this._unboundTransceivers.filter(tr => boundTransceivers.indexOf(tr) === -1);
@@ -324,7 +332,7 @@ class Connection extends Listenable() {
         if(matches.length && matches[0].receiver.track){
             const track = matches[0].receiver.track;
             track.meta = meta;
-            track.dispatchEvent(new Event('metachanged'));
+            track.dispatchEvent(new Event('metachanged', [meta]));
         }else{
             this._metaCache[mid] = meta;
         }
@@ -390,6 +398,22 @@ class Connection extends Listenable() {
         // if the connection failed, restart the ice gathering process according to the spec, will lead to negotiationneeded event
         if(this._connection.iceConnectionState === "failed"){
             this._connection.restartIce();
+        }
+    }
+
+    _restartJammedConnectionAttempts(){
+        const removeConnectionAttemptTimeout = () => {
+            clearTimeout(this._connectingAttemptTimeout);
+            this._connectingAttemptTimeout = undefined;
+        };
+        if(this._connection.connectionState === "connecting"){
+            this._connectingAttemptTimeout = setTimeout(() => {
+                if(this._verbose) this._logger.log('connection exceeded time to connect and is assumed to be jammed, restarting ice gathering...');
+                removeConnectionAttemptTimeout();
+                this._connection.restartIce();
+            }, 10000);
+        }else{
+            removeConnectionAttemptTimeout();
         }
     }
 

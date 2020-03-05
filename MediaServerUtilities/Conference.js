@@ -9,17 +9,17 @@ const Architecture = require('./_Architecture.js');
 
 module.exports = class Conference extends Listenable(){
 
-    constructor({name, signaler, verbose = false, logger = console, architecture= 'mesh', video = {width: 420, height: 360}}){
+    constructor({name, signaler, verbose = false, logger = console, architecture= 'mesh', video = {width: 640, height: 480}}){
         super();
         this._name = name;
         this._signaler = signaler;
         this._peers = new ConnectionManager({signaler, name, verbose, logger});
-        this._sfu = new Connection({signaler, name, peer: '@server', verbose, logger});
-        this._mcu = new Connection({signaler, name, peer: '@server', verbose, logger});
+        this._sfu = new Connection({signaler, name, peer: '@sfu', isYielding: false, verbose, logger});
+        this._mcu = new Connection({signaler, name, peer: '@mcu', isYielding: false, verbose, logger});
         this._speechDetection = new SpeechDetection({threshold: 65});
-        this._videoMixer = new VideoMixer();
+        this._videoMixer = new VideoMixer(video);
         this._videoMixer.addConfig(new SpeakerConfig(this._speechDetection), 'speaker');
-        this._audioMixer = new AudioMixer(video);
+        this._audioMixer = new AudioMixer();
         this._architecture = new Architecture(architecture);
         this._addedMedia = [];
         this._display = null;
@@ -31,18 +31,27 @@ module.exports = class Conference extends Listenable(){
         });
         this._peers.addEventListener('trackadded', (track, user) => {
             if(this._architecture.value === 'mesh'){
-                this._videoMixer.addMedia(track, 'peers-'+track.id);
+                this._videoMixer.addMedia(track, 'peers-'+user);
                 if(track.kind === "audio") this._speechDetection.addMedia(track, 'peers-'+user);
+                this.dispatchEvent('trackadded', [track, user]);
+                this.dispatchEvent('mediachanged', []);
             }
         });
         this._sfu.addEventListener('trackadded', track => {
             if(this._architecture.value === 'sfu'){
-                this._videoMixer.addMedia(track, 'sfu-'+track.meta);
-                if(track.kind === "audio") this._speechDetection.addMedia(track, 'sfu-'+track.meta);
+                const addTrack = track => {
+                    this._videoMixer.addMedia(track, 'sfu-'+track.meta);
+                    if(track.kind === "audio") this._speechDetection.addMedia(track, 'sfu-'+track.meta);
+                    this.dispatchEvent('trackadded', [track, track.meta]);
+                    this.dispatchEvent('mediachanged', []);
+                };
+                if(track.meta) addTrack(track);
+                else track.addEventListener('metachanged', () => addTrack(track, track.meta));
             }
         });
         this._peers.addEventListener('userconnected', user => this.dispatchEvent('userconnected', [user]));
         this._peers.addEventListener('userdisconnected', user => this.dispatchEvent('userdisconnected', [user]));
+        this.addEventListener('mediachanged', () => this._updateDisplayedStream())
     }
 
     get architecture(){
@@ -70,16 +79,31 @@ module.exports = class Conference extends Listenable(){
                 this._getArchitectureHandler('mesh').get(user).tracks.forEach(track => {
                     this._addTrackToLocalMediaProcessors(track, user)
                 });
+
             });
+            this._addedMedia.forEach(m => this._addLocalMediaToLocalMediaProcessors(m));
         }else if(newArchitecture === 'sfu'){
             this._clearLocalMediaProcessors();
             this._getArchitectureHandler('sfu').tracks.forEach(track => {
                 this._addTrackToLocalMediaProcessors(track, track.meta);
             });
+            this._addedMedia.forEach(m => this._addLocalMediaToLocalMediaProcessors(m));
+        }else if(newArchitecture === 'mcu'){
+            this.dispatchEvent('mediachanged', []);
         }
         this._updateDisplayedStream();
         this._getArchitectureHandler(previousArchitecture).removeMedia();
         this.dispatchEvent('architectureswitched', [newArchitecture, previousArchitecture]);
+    }
+
+    switchArchitecture(name=undefined){
+        let msg = {type: 'architecture:switch', receiver: '@server'};
+        if(name !== undefined){
+            msg.data = name;
+        }else{
+            msg.data = this._architecture.nextValue();
+        }
+        this._signaler.send(msg);
     }
 
     _clearLocalMediaProcessors(){
@@ -107,15 +131,22 @@ module.exports = class Conference extends Listenable(){
 
     async addWebcam(config = {video: true, audio: true}){
         const stream = await window.navigator.mediaDevices.getUserMedia(config);
-        stream.meta = this.name+'-webcam';
         this.addMedia(stream);
     }
 
     async addMedia(m){
         if(!m.meta) m.meta = this._name;
         this._getArchitectureHandler().addMedia(m);
-        if(this._architecture.value !== 'mcu') this._speechDetection.addMedia(m);
+        this._addLocalMediaToLocalMediaProcessors(m);
         this._addedMedia.push(m);
+        this._updateDisplayedStream();
+    }
+
+    _addLocalMediaToLocalMediaProcessors(m){
+        if(this._architecture.value !== 'mcu'){
+            this._speechDetection.addMedia(m, this._name);
+            this._videoMixer.addMedia(m, this._name);
+        }
     }
 
     /**
@@ -133,9 +164,13 @@ module.exports = class Conference extends Listenable(){
      * */
     _updateDisplayedStream(){
         if(this._display){
+            console.log('updated display');
             this._display.srcObject = this.out;
-            if(this._display.paused) this._display.play();
         }
+    }
+
+    get numberOfAddedMedia(){
+        return this._addedMedia.length;
     }
 
 };
