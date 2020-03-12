@@ -19,7 +19,7 @@ class ConnectionManager extends Listenable(){
      * @param {boolean} [verbose=false] Any action or step in the connection process can be logged, if this flag is set to true
      * @param {console} [logger=console] A logger that must offer the methods .log or .error. Only used in verbose mode, defaults to console
      * */
-    constructor({name, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, verbose = false, logger = console, isYielding = undefined} = {}){
+    constructor({name, signaler, iceServers = [], useUnifiedPlan = true, verbose = false, logger = console, isYielding = undefined} = {}){
         super();
         this._signaler = signaler;
         this._verbose = verbose;
@@ -34,6 +34,7 @@ class ConnectionManager extends Listenable(){
                     this.dispatchEvent('userconnected', [msg.data]);
                     this._forwardEvents(this.connections[msg.data]);
                     this.localMediaStreams.forEach(stream => this.connections[msg.data].addMedia(stream));
+                    this.connections[msg.data].addEventListener('close', () => delete this.connections[msg.data]);
                     break;
                 case "user:disconnected":
                     if(this._verbose) this._logger.log('user disconnected', msg.data);
@@ -48,6 +49,7 @@ class ConnectionManager extends Listenable(){
                         this.dispatchEvent('userconnected', [u]);
                         this._forwardEvents(this.connections[u]);
                         this.localMediaStreams.forEach(stream => this.connections[u].addMedia(stream));
+                        this.connections[u].addEventListener('close', () => delete this.connections[u]);
                     });
                     break;
             }
@@ -64,7 +66,7 @@ class ConnectionManager extends Listenable(){
         connection.addEventListener('streamremoved', (stream, track, mid) => this.dispatchEvent('streamremoved', [stream, connection.peer, track, mid]));
         connection.addEventListener('trackadded', (track, mid) => this.dispatchEvent('trackadded', [track, connection.peer, mid]));
         connection.addEventListener('trackremoved', (track, mid) => this.dispatchEvent('trackremoved', [track, connection.peer, mid]));
-        connection.addEventListener('close', () => this.dispatchEvent('connectionclosed', [connection.peer]));
+        connection.addEventListener('close', () => this.dispatchEvent('connectionclosed', [connection.peer, connection]));
     }
 
     /**
@@ -134,6 +136,37 @@ class ConnectionManager extends Listenable(){
             this.localMediaStreams = this.localMediaStreams.filter(s => s.id !== arguments[0].id);
             Object.values(this.connections).forEach(con => con.removeMedia(arguments[0]));
         }
+    }
+
+    muteMedia(m = "*", mute=true){
+        Object.values(this.connections).forEach(con => con.muteMedia(m, mute));
+    }
+
+    /**
+     * get a report about the overall amount of bytes and packets currently sent over the managed connections and how many of them get dropped
+     * @param {Number} [watchTime=1000] in order to get the byte throughput, one has to watch the connection for a time. This parameter specifies for how long. It takes the number of milliseconds and defaults to a second, so that you get bytes per second as a result
+     * @returns Promise resolves to a dictionary with inbound and outbound numeric byte transmission values
+     * */
+    async getReport(watchTime=1000){
+        const report = {inbound: {bytes: 0, packets: 0, packetLoss: 0, tracks: 0}, outbound: {bytes: 0, packets: 0, packetLoss: 0, tracks: 0}, duration: 0};
+        try{
+            const reports = await Promise.all(Object.values(this.connections).map(con => con.getReport(watchTime)));
+            reports.reduce((complete, r) => {
+                complete.inbound.bytes += r.inbound.bytes;
+                complete.inbound.packets += r.inbound.packets;
+                complete.inbound.packetLoss += r.inbound.packetLoss;
+                complete.inbound.tracks += r.inbound.tracks;
+                complete.outbound.bytes += r.outbound.bytes;
+                complete.outbound.packets += r.outbound.packets;
+                complete.outbound.packetLoss += r.outbound.packetLoss;
+                complete.outbound.tracks += r.outbound.tracks;
+                complete.duration += Math.floor(r.duration/reports.length);
+            }, report);
+        }catch (err) {
+            this._logger.error(err);
+        }
+        return report;
+
     }
 
     /**

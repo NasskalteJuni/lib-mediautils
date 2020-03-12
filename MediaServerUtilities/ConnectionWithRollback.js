@@ -1,6 +1,5 @@
 const Listenable = require('./Listenable.js');
 const ID = () => new Date().getTime().toString(32) + Math.random().toString(32).substr(2,7);
-const timestamp = () => new Date().toISOString();
 
 /**
  * Introduces an abstraction layer around the RTCPeerConnection.
@@ -139,7 +138,6 @@ class Connection extends Listenable() {
             this._signaler.send({
                 receiver: this._peer,
                 data: candidate,
-                sent: timestamp(),
                 type: 'ice'
             });
         }
@@ -231,7 +229,7 @@ class Connection extends Listenable() {
             }
             if (description.type === "offer") {
                 await this._connection.setLocalDescription(await this._connection.createAnswer());
-                this._signaler.send({type: 'sdp', receiver: this._peer, data: this._connection.localDescription, sent: timestamp()});
+                this._signaler.send({type: 'sdp', receiver: this._peer, data: this._connection.localDescription});
             }
         } catch (err) {
             this._logger.error(err);
@@ -299,7 +297,6 @@ class Connection extends Listenable() {
                         receiver: this._peer,
                         type: 'receiver:stop',
                         data: transceiver.mid,
-                        sent: timestamp()
                     });
                     removed++;
                 }
@@ -314,11 +311,14 @@ class Connection extends Listenable() {
      * @private
      * */
     _stopReceiver(mid){
-        this._connection.getTransceivers().filter(tr => tr.mid === mid).map(tr => tr.receiver.track).forEach(track=> {
-            track.stop();
-            // we have to stop the track, since Chrome misses the transceiver.stop() implementation,
-            // but calling stop will not fire the ended event, so we have to fire it instead...
-            track.dispatchEvent(new Event('ended'));
+        this._connection.getTransceivers().filter(tr => tr.mid === mid).forEach(tr => {
+            const track = tr.receiver.track;
+            if(track){
+                track.stop();
+                // we have to stop the track, since Chrome misses the transceiver.stop() implementation,
+                // but calling stop will not fire the ended event, so we have to fire it instead...
+                track.dispatchEvent(new Event('ended'));
+            }
         });
     }
 
@@ -368,16 +368,20 @@ class Connection extends Listenable() {
         const searchingActualTrack = track instanceof MediaStreamTrack;
         const searchingTrackKind = typeof track === "string" && (['audio', 'video', '*'].indexOf(track) >= 0);
         this._connection.getTransceivers().forEach(transceiver => {
-            if((searchingActualTrack && transceiver.sender.track.id === track.id) || (searchingTrackKind && (track === '*' || transceiver.sender.track.kind === track))){
-                if(muted){
-                    if(!transceiver.sender._muted){
-                        transceiver.sender._muted = transceiver.sender.track;
-                        transceiver.sender.replace(null)
-                    }
-                }else{
-                    if(transceiver.sender._muted){
-                        transceiver.sender.replace(transceiver.sender._muted);
-                        delete transceiver.sender['_muted'];
+            if(muted ? transceiver.sender.track : transceiver.sender._muted){
+                const trackAndNotMuted = () => (searchingActualTrack && transceiver.sender.track.id === track.id) || (searchingTrackKind && (track === '*' || transceiver.sender.track.kind === track));
+                const trackAndMuted = () => (searchingActualTrack && transceiver.sender._muted.id === track.id) || (searchingTrackKind && (track === '*' || transceiver.sender._muted.kind === track));
+                if(muted ? trackAndNotMuted() : trackAndMuted()){
+                    if(muted){
+                        if(!transceiver.sender._muted){
+                            transceiver.sender._muted = transceiver.sender.track;
+                            transceiver.sender.replaceTrack(null)
+                        }
+                    }else{
+                        if(transceiver.sender._muted){
+                            transceiver.sender.replaceTrack(transceiver.sender._muted);
+                            delete transceiver.sender['_muted'];
+                        }
                     }
                 }
             }
@@ -407,11 +411,13 @@ class Connection extends Listenable() {
             this._connectingAttemptTimeout = undefined;
         };
         if(this._connection.connectionState === "connecting"){
-            this._connectingAttemptTimeout = setTimeout(() => {
+            this._connectingAttemptTimeout = setTimeout(async () => {
                 if(this._verbose) this._logger.log('connection exceeded time to connect and is assumed to be jammed, restarting ice gathering...');
                 removeConnectionAttemptTimeout();
+                if(this._connection.signalingState === "have-local-offer") await this._connection.setLocalDescription({type: "rollback"});
                 this._connection.restartIce();
-            }, 10000);
+                this._connection.dispatchEvent(new Event('negotiationneeded'));
+            }, 3000 + Math.random()*2000);
         }else{
             removeConnectionAttemptTimeout();
         }
@@ -463,7 +469,24 @@ class Connection extends Listenable() {
     }
 
     /**
-     * All non-muted received tracks of the given connection
+     * mute the given media
+     * @param {String|MediaStream|MediaStreamTrack} media The media or media kind to mute
+     * @param {Boolean} [mute=true] Flag to define if you want to mute or unmute media
+     * */
+    muteMedia(media, mute=true){
+        if(media instanceof MediaStream) {
+            media.getTracks().forEach(track => this._muteTrack(track, mute));
+        } else if ((media instanceof MediaStreamTrack) || (typeof media === "string" && ["audio", "video", "*"].indexOf(media) >= 0)) {
+            this._muteTrack(media, mute)
+        } else if(typeof media === undefined || arguments.length === 0 || (typeof media === "string" && media === "*")){
+            this._muteTrack("*", mute);
+        } else {
+            this._logger.error('unknown media type', typeof media, media);
+        }
+    }
+
+    /**
+     * All received tracks of the given connection
      * @readonly
      * */
     get tracks() {
@@ -507,8 +530,7 @@ class Connection extends Listenable() {
         const msg = {
             receiver: this._peer,
             data: 'immediately',
-            type: 'connection:close',
-            sent: timestamp()
+            type: 'connection:close'
         };
         this._signaler.send(msg);
         this._connection.close();
@@ -521,6 +543,61 @@ class Connection extends Listenable() {
      * */
     get closed() {
         return this._connection.connectionState === "closed" || this._connection.signalingState === "closed";
+    }
+
+
+    /**
+     * get a report of the inbound and outbound byte and packet transmission rate as also the packet-loss for this peer connection as an Object
+     * @param {Number} [watchTime=1000] the time to gather the data transmission rates in milliseconds. Defaults to 1 Second, ergo 1000 ms.
+     * @return Promise resolves with an performance report Object containing inbound and outbound dictionaries with the keys bytes, packets and packetLoss
+     * */
+    async getReport(watchTime = 1000){
+        const getRelevantValues = statValueDict => {
+            const val = {inbound: {bytes: 0, packets: 0, packetLoss: 0}, outbound: {bytes: 0, packets: 0, packetLoss: 0}, timestamp: 0};
+            for(let stat of statValueDict){
+                if(stat.type === 'inbound-rtp'){
+                    val.inbound.bytes += stat.bytesReceived;
+                    val.inbound.packets += stat.packetsReceived;
+                    val.inbound.packetLoss += stat.packetsLost;
+                }else if(stat.type === 'outbound-rtp'){
+                    val.outbound.bytes += stat.bytesSent;
+                    val.outbound.packets += stat.packetsSent;
+                }else if(stat.type === 'remote-inbound-rtp'){
+                    val.outbound.packetLoss += stat.packetsLost;
+                }else if(stat.type === 'peer-connection'){
+                    val.timestamp = stat.timestamp;
+                }
+            }
+            return val;
+        };
+        return new Promise(async(resolve, reject) => {
+            try{
+                const statsAtStart = (await this._connection.getStats()).values();
+                setTimeout(async () => {
+                    const statsAtEnd = (await this._connection.getStats()).values();
+                    const valuesAtStart = getRelevantValues(statsAtStart);
+                    const valuesAtEnd = getRelevantValues(statsAtEnd);
+                    const duration = valuesAtEnd.timestamp - valuesAtStart.timestamp;
+                    resolve({
+                        inbound: {
+                            bytes: valuesAtEnd.inbound.bytes-valuesAtStart.inbound.bytes,
+                            packets: valuesAtEnd.inbound.packets-valuesAtStart.inbound.packets,
+                            packetLoss: valuesAtEnd.inbound.packetLoss-valuesAtStart.inbound.packetLoss,
+                            tracks: this._connection.getTransceivers().filter(tr => tr.currentDirection !== "inactive" && (tr.direction === "sendrecv" || tr.direction === "recvonly") && tr.receiver.track && tr.receiver.track.readyState === "live").length
+                        },
+                        outbound: {
+                            bytes: valuesAtEnd.outbound.bytes-valuesAtStart.outbound.bytes,
+                            packets: valuesAtEnd.outbound.packets-valuesAtStart.outbound.packets,
+                            packetLoss: valuesAtEnd.outbound.packetLoss-valuesAtStart.outbound.packetLoss,
+                            tracks: this._connection.getTransceivers().filter(tr => tr.currentDirection !== "inactive" && (tr.direction === "sendrecv" || tr.direction === "sendonly") && tr.sender.track && tr.sender.track.readyState === "live").length
+                        },
+                        duration,
+                    });
+                }, watchTime);
+            }catch(err){
+                reject(err);
+            }
+        });
     }
 
 }

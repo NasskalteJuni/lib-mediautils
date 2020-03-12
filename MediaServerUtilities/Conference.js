@@ -7,15 +7,32 @@ const SpeakerConfig = require('./VideoMixingConfigurations/Speaker.js');
 const SpeechDetection = require('./SpeechDetection.js');
 const Architecture = require('./_Architecture.js');
 
+/**
+ * @class Utility to transmit your media to other conference members using a specified architecture
+ * */
 module.exports = class Conference extends Listenable(){
 
-    constructor({name, signaler, verbose = false, logger = console, architecture= 'mesh', video = {width: 640, height: 480}}){
+    /**
+     * create a new conference that exchanges your media streams with other conference members using multiple architectures,
+     * like the simple peer to peer model 'mesh' or the architecture 'mcu', that uses a media server to mix streams
+     * @param {Object} config
+     * @param {String} config.name your username in the conference
+     * @param {Signaler} config.signaler The signaler to use to communicate the necessary data to transmit media between the conference members
+     * @param {String} [config.architecture='mesh'] The architecture (name) to start with. Defaults to the purely peer to peer based mesh model
+     * @param {Object} [config.video={width:640, height:480}] The video size to preferably use
+     * @param {Array} [config.iceServers=[]] The ice servers to use, in the common RTCIceServer-format
+     * @param {Console} [config.logger=console] The logger to use. Anything with .log() and .error() method should work. Defaults to the browser console
+     * @param {Boolean} [config.verbose=false] If you want to log (all) information or not
+     * */
+    constructor({name, signaler, architecture= 'mesh', iceServers = [], video = {width: 640, height: 480}, verbose = false, logger = console}){
         super();
         this._name = name;
         this._signaler = signaler;
-        this._peers = new ConnectionManager({signaler, name, verbose, logger});
-        this._sfu = new Connection({signaler, name, peer: '@sfu', isYielding: false, verbose, logger});
-        this._mcu = new Connection({signaler, name, peer: '@mcu', isYielding: false, verbose, logger});
+        this._verbose = verbose;
+        this._logger = logger;
+        this._peers = new ConnectionManager({signaler, name, iceServers, verbose, logger});
+        this._sfu = new Connection({signaler, name, iceServers, peer: '@sfu', isYielding: false, verbose, logger});
+        this._mcu = new Connection({signaler, name, iceServers, peer: '@mcu', isYielding: false, verbose, logger});
         this._speechDetection = new SpeechDetection({threshold: 65});
         this._videoMixer = new VideoMixer(video);
         this._videoMixer.addConfig(new SpeakerConfig(this._speechDetection), 'speaker');
@@ -24,7 +41,6 @@ module.exports = class Conference extends Listenable(){
         this._addedMedia = [];
         this._display = null;
         signaler.addEventListener('message', message => {
-            console.log(message);
             if(message.type === 'architecture:switch'){
                 this._handleArchitectureSwitch(message.data);
             }
@@ -49,25 +65,52 @@ module.exports = class Conference extends Listenable(){
                 else track.addEventListener('metachanged', () => addTrack(track, track.meta));
             }
         });
+        this._mcu.addEventListener('trackadded', () => {
+            this._updateDisplayedStream();
+        });
         this._peers.addEventListener('userconnected', user => this.dispatchEvent('userconnected', [user]));
         this._peers.addEventListener('userdisconnected', user => this.dispatchEvent('userdisconnected', [user]));
+        this._peers.addEventListener('connectionclosed', user => {
+            if(this._architecture.value === 'mesh'){
+                this._videoMixer.removeMedia('peers-'+user);
+                this._audioMixer.removeMedia('peers-'+user);
+                this._speechDetection.removeMedia('peers-'+user);
+                this._updateDisplayedStream();
+            }
+        });
         this.addEventListener('mediachanged', () => this._updateDisplayedStream())
     }
 
+    /**
+     * the name of the architecture currently used
+     * @readonly
+     * */
     get architecture(){
         return this._architecture.value;
     }
 
+    /**
+     * the current conference members
+     * @readonly
+     * */
     get members(){
         return this._peers.users;
     }
 
+    /**
+     * get the current or specified architecture connection(s)
+     * @private
+     * */
     _getArchitectureHandler(name = null){
         if(name === null) name = this._architecture.value;
         const architectures = {mesh: this._peers, mcu: this._mcu, sfu: this._sfu};
         return architectures[name];
     }
 
+    /**
+     * when notified to switch to another architecture, use the next architecture model to transmit and receive media and display it
+     * @private
+     * */
     _handleArchitectureSwitch(newArchitecture){
         const previousArchitecture = this._architecture.value;
         this._architecture.value = newArchitecture;
@@ -79,7 +122,6 @@ module.exports = class Conference extends Listenable(){
                 this._getArchitectureHandler('mesh').get(user).tracks.forEach(track => {
                     this._addTrackToLocalMediaProcessors(track, user)
                 });
-
             });
             this._addedMedia.forEach(m => this._addLocalMediaToLocalMediaProcessors(m));
         }else if(newArchitecture === 'sfu'){
@@ -96,22 +138,59 @@ module.exports = class Conference extends Listenable(){
         this.dispatchEvent('architectureswitched', [newArchitecture, previousArchitecture]);
     }
 
+    /**
+     * switches the used architecture to the given one
+     * @param {String} [name=nextArchitectureValue] the architecture to switch to
+     * */
     switchArchitecture(name=undefined){
-        let msg = {type: 'architecture:switch', receiver: '@server'};
-        if(name !== undefined){
-            msg.data = name;
-        }else{
-            msg.data = this._architecture.nextValue();
-        }
+        if(name === undefined) name = this._architecture.nextValue();
+        if(this._verbose) this._logger.log('request switching to architecture', name);
+        let msg = {type: 'architecture:switch', receiver: '@server', data: name};
         this._signaler.send(msg);
     }
 
+    /**
+     * switches to the architecture that comes after the current architecture in the order of architectures (standard: mesh -> sfu -> mcu -> mesh)
+     * */
+    nextArchitecture(){
+        this.switchArchitecture(this._architecture.nextValue());
+    }
+
+    /**
+     * the architecture that is used after the current architecture
+     * @returns {String} the architecture name
+     * */
+    get nextArchitectureValue(){
+        return this._architecture.nextValue();
+    }
+
+    /**
+     * switches to the architecture that is before the current one in the order of architectures to use (standard: mesh -> sfu -> mcu -> mesh)
+     * */
+    previousArchitecture(){
+        this.switchArchitecture(this._architecture.prevValue());
+    }
+
+    /**
+     * the architecture that is used before the current architecture
+     * @returns {String} the architecture name
+     * */
+    get prevArchitectureValue(){
+        return this._architecture.prevValue();
+    }
+
+    /**
+     * @private
+     * */
     _clearLocalMediaProcessors(){
         this._videoMixer.removeMedia();
         this._speechDetection.removeMedia();
         this._audioMixer.removeMedia();
     }
 
+    /**
+     * @private
+     * */
     _addTrackToLocalMediaProcessors(track, id){
         if(track.kind === "video"){
             this._videoMixer.addMedia(track, id)
@@ -121,6 +200,10 @@ module.exports = class Conference extends Listenable(){
         }
     }
 
+    /**
+     * The stream of the conference
+     * @returns MediaStream The mixed & ready stream to display
+     * */
     get out(){
         if(this._architecture.value === 'mcu'){
             return this._mcu.streams[0];
@@ -129,11 +212,28 @@ module.exports = class Conference extends Listenable(){
         }
     }
 
+    /**
+     * activates your webcam and adds the stream to the connection
+     * @param {Object} [config={video:true, audio:true}] the webcam configuration to use
+     * */
     async addWebcam(config = {video: true, audio: true}){
         const stream = await window.navigator.mediaDevices.getUserMedia(config);
         this.addMedia(stream);
     }
 
+    /**
+     * mutes (or unmutes) added media
+     * @param {String|MediaStream|MediaStreamTrack} m The media to mute. Defaults to all media "*" but can be any stream, track or media kind ("video", "audio" or "*")
+     * @param {Boolean} [mute=true] a flag which indicates if you want to mute media, or unmute muted media. Muting muted or unmuting not muted Media has no effect.
+     * */
+    muteMedia(m="*", mute=true){
+        this._getArchitectureHandler().muteMedia(m, mute);
+    }
+
+    /**
+     * add media to the connection
+     * @param {MediaStream|MediaStreamTrack} m The media to add. This can be a stream or a single track
+     * */
     async addMedia(m){
         if(!m.meta) m.meta = this._name;
         this._getArchitectureHandler().addMedia(m);
@@ -142,10 +242,87 @@ module.exports = class Conference extends Listenable(){
         this._updateDisplayedStream();
     }
 
+    /**
+     * remove media from the conference
+     * @param {String|MediaStream|MediaStreamTrack} [m="*"] the media to remove. Can be a media type like audio, video or "*" for all, a track or a stream
+     * */
+    removeMedia(m = "*"){
+        if(m instanceof MediaStream){
+            m.getTracks().forEach(track => {
+                this._getArchitectureHandler().removeMedia(track);
+                this._removeLocalMediaFromLocalMediaProcessors(m);
+            })
+        }else if(m instanceof MediaStreamTrack){
+            this._getArchitectureHandler().removeMedia(m);
+            this._removeLocalMediaFromLocalMediaProcessors(m)
+        }else if(typeof m === "string" && ["video", "audio", "*"].indexOf(m.toLowerCase()) >= 0){
+            m = m.toLowerCase();
+            this._getArchitectureHandler().removeMedia(m);
+            this._removeLocalMediaFromLocalMediaProcessors(m);
+        }else{
+            console.log('unknown media type', m)
+        }
+        this._addedMedia = this._addedMedia.filter(added => {
+            if(typeof m === "string"){
+                m = m.toLocaleLowerCase();
+                if(added instanceof MediaStreamTrack){
+                    return added.kind !== m || m !== "*"
+                }else if(added instanceof MediaStream){
+                    added.getTracks().filter(track => track.kind !== m || m !== "*").forEach(track => added.removeTrack(track))
+                    return added.getTracks().length > 0
+                }
+            }else if(m instanceof MediaStream){
+                if(added instanceof MediaStream){
+                    return added.id !== m.id;
+                }else if(added instanceof MediaStreamTrack){
+                    return m.getTracks().findIndex(track => track.id === added.id) === -1;
+                }
+            }else if(m instanceof MediaStreamTrack){
+                if(added instanceof MediaStream){
+                    added.getTracks().forEach(track => {
+                        if(track.id === m.id) added.removeTrack(track);
+                    });
+                    return added.getTracks().length > 0;
+                }else if(added instanceof MediaStreamTrack){
+                    return m.id !== added.id;
+                }
+            }
+        });
+    }
+
+    /**
+     * @private
+     * */
     _addLocalMediaToLocalMediaProcessors(m){
         if(this._architecture.value !== 'mcu'){
             this._speechDetection.addMedia(m, this._name);
             this._videoMixer.addMedia(m, this._name);
+        }
+    }
+
+    /**
+     * @private
+     * */
+    _removeLocalMediaFromLocalMediaProcessors(m){
+        if(m instanceof MediaStream){
+            m.getTracks().forEach(track => {
+                if(track.kind === "video"){
+                    this._videoMixer.removeMedia(track)
+                }else{
+                    this._audioMixer.removeMedia(track);
+                    this._speechDetection.removeMedia(track);
+                }
+            })
+        }else if(typeof m === "string" && ["video", "audio", "*"].indexOf(m.toLowerCase()) >= 0){
+            m = m.toLowerCase();
+            this._getArchitectureHandler().removeMedia(m);
+            if(m === "*" || m === "video") {
+                this._videoMixer.removeMedia();
+            }
+            if(m === "*" || m === "audio") {
+                this._audioMixer.removeMedia();
+                this._speechDetection.removeMedia()
+            }
         }
     }
 
@@ -156,6 +333,7 @@ module.exports = class Conference extends Listenable(){
     displayOn(element){
         if(typeof element === 'string') element = document.querySelector(element);
         this._display = element;
+        if(this._verbose) this._logger.log('display output on', element);
         this._updateDisplayedStream();
     }
 
@@ -164,13 +342,25 @@ module.exports = class Conference extends Listenable(){
      * */
     _updateDisplayedStream(){
         if(this._display){
-            console.log('updated display');
+            if(this._verbose) this._logger.log('updated display');
             this._display.srcObject = this.out;
         }
     }
 
+    /**
+     * Get the number of media objects that you added. This is not equal to the number of MediaStreamTracks, since added MediaStreams also count just as one
+     * @return Number the number of media added
+     * */
     get numberOfAddedMedia(){
         return this._addedMedia.length;
+    }
+
+    /**
+     * Get the number of added MediaStreamTracks to the connection
+     * @return Number the number of tracks added (as tracks only or as part of a stream)
+     * */
+    get addedTracks(){
+       return this.addedMedia.reduce((count, m) => m instanceof MediaStream ? count+m.getTracks().length : count+1, 0);
     }
 
 };

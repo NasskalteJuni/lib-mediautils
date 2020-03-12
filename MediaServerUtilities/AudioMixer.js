@@ -47,6 +47,7 @@ class AudioMixer{
      * @param {string|MediaStream|MediaStreamTrack} m The media to remove. Either a stream, a track or the identifier that was used to add the track
      * */
     removeMedia(m){
+        if(arguments.length === 0) Object.keys(this._in).forEach(k => delete this._in[k]);
         if(arguments[0] instanceof MediaStream || arguments[0] instanceof MediaStreamTrack) m = arguments[0].id;
         delete this._in[m];
         this._rebuildGraph();
