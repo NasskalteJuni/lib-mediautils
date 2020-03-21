@@ -100,7 +100,7 @@ class VideoMixer extends Videos(Configurations()){
             }
             this._context = this._canvas.getContext("2d");
             this._context.clearRect(0,0,this._canvas.width,this._canvas.height);
-            this._out = this._canvas.captureStream(this.fps);
+            this._out = this._canvas.captureStream();
         }
         if(!this._canvas && typeof canvas === "string") window.addEventListener('load',() => this._initCanvas(canvas, width, height));
     }
@@ -174,14 +174,9 @@ class VideoMixer extends Videos(Configurations()){
             this.currentConfig.paint(ids, this._canvas, this._context);
         }else{
             const snapshot = {background: null, mixed: []};
-            this._context.clearRect(0,0,this._width,this._height);
-            const background = this.currentConfig.background()(ids);
-            this._context.fillStyle = background;
-            snapshot.background = background;
-            this._context.fillRect(0,0,this._width, this._height);
             // check if you have to resolve position functions
             const resolveFn = (v, s) => typeof v === "function" ? v(s) : v;
-            this.currentConfig.calculatedPositions
+            const resolveFrames = this.currentConfig.calculatedPositions
                 // sort according to z-Index
                 .sort((a , b) => {
                     if(a.zIndex !== undefined && b.zIndex !== undefined){
@@ -189,24 +184,41 @@ class VideoMixer extends Videos(Configurations()){
                     }
                     else if(a.zIndex !== undefined) return 1;
                     else return -1
-                })
+                }).map(pos => new Promise((resolve, reject) =>{
+                    const resolveFrame = (pos.source && pos.source.track && !pos.source.track.ended && !pos.source.track.muted) ? pos.source.grabFrame() : createImageBitmap(this._canvas);
+                    resolveFrame.then(frame => {
+                        pos.frame = frame;
+                        resolve(pos)
+                    }).catch(() => {});
+                }));
+
+            Promise.all(resolveFrames).then(r => {
+                // wipe away old data and paint the background
+                this._context.clearRect(0,0,this._width,this._height);
+                const background = this.currentConfig.background()(ids);
+                this._context.fillStyle = background;
+                snapshot.background = background;
+                this._context.fillRect(0,0,this._width, this._height);
                 // draw each frame
-                .forEach((pos, drawIndex) => {
+                r.forEach(async (pos, drawIndex) => {
                     const stats = {width: this.width, height: this.height, id: pos.assignedId, drawIndex};
                     if(pos.source){
+                        const track = pos.source.track;
                         const x = resolveFn(pos.x, stats);
                         const y = resolveFn(pos.y, stats);
                         const width = resolveFn(pos.width, stats);
                         const height = resolveFn(pos.height, stats);
-                        this._context.drawImage(pos.source, x, y, width, height);
-                        snapshot.mixed.push({id: pos.assignedId, drawIndex, x, y, width, height});
+                        if(!track.muted) this._context.drawImage(pos.frame, x, y, width, height);
+                        else this._context.fillRect(x, y, width, height);
+                        snapshot.mixed.push({id: pos.assignedId, drawIndex, x, y, width, height, track});
                     }
                 });
-            // optionally take a snapshot
-            if(this._snapshot){
-                this._snapshot(snapshot);
-                this._snapshot = null;
-            }
+                // optionally take a snapshot
+                if(this._snapshot){
+                    this._snapshot(snapshot);
+                    this._snapshot = null;
+                }
+            }).catch(console.error);
         }
     }
 
