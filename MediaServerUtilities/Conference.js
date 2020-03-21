@@ -1,5 +1,5 @@
 const ConnectionManager = require('./ConnectionManager.js');
-const Connection = require('./ConnectionWithRollback.js');
+const Connection = require('./ConnectionWithSignaledLock.js');
 const VideoMixer = require('./VideoMixer.js');
 const AudioMixer = require('./AudioMixer.js');
 const Listenable = require('./Listenable.js');
@@ -56,6 +56,7 @@ module.exports = class Conference extends Listenable(){
         this._sfu.addEventListener('trackadded', track => {
             if(this._architecture.value === 'sfu'){
                 const addTrack = track => {
+                    console.log('adding track', track, 'for', track.meta);
                     this._videoMixer.addMedia(track, 'sfu-'+track.meta);
                     if(track.kind === "audio") this._speechDetection.addMedia(track, 'sfu-'+track.meta);
                     this.dispatchEvent('trackadded', [track, track.meta]);
@@ -361,6 +362,22 @@ module.exports = class Conference extends Listenable(){
      * */
     get addedTracks(){
        return this.addedMedia.reduce((count, m) => m instanceof MediaStream ? count+m.getTracks().length : count+1, 0);
+    }
+
+    /**
+     * Close down any connections of any used architecture
+     * */
+    close(){
+        [this._peers, this._sfu, this._mcu].forEach(architecture => architecture.close());
+        this._addedMedia = [];
+    }
+
+    /**
+     * A conference is closed if at least one connection in use is closed
+     * @readonly
+     * */
+    get closed(){
+        return [this._peers, this._sfu, this._mcu].reduce((isClosed, architecture) =>architecture.closed || isClosed, false)
     }
 
 };

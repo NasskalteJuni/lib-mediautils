@@ -1,5 +1,5 @@
 const Listenable = require('./Listenable.js');
-const Connection = require('./ConnectionWithRollback.js');
+const Connection = require('./ConnectionWithSignaledLock.js');
 
 /**
  * Allows to manage a set of Connection {@link Connection}
@@ -34,7 +34,11 @@ class ConnectionManager extends Listenable(){
                     this.dispatchEvent('userconnected', [msg.data]);
                     this._forwardEvents(this.connections[msg.data]);
                     this.localMediaStreams.forEach(stream => this.connections[msg.data].addMedia(stream));
-                    this.connections[msg.data].addEventListener('close', () => delete this.connections[msg.data]);
+                    this.connections[msg.data].addEventListener('close', () => {
+                        if(this._verbose) this._logger.log('connection closed, remove user', msg.data);
+                        this.dispatchEvent('userdisconnected', [msg.data]);
+                        delete this.connections[msg.data];
+                    });
                     break;
                 case "user:disconnected":
                     if(this._verbose) this._logger.log('user disconnected', msg.data);
@@ -49,7 +53,16 @@ class ConnectionManager extends Listenable(){
                         this.dispatchEvent('userconnected', [u]);
                         this._forwardEvents(this.connections[u]);
                         this.localMediaStreams.forEach(stream => this.connections[u].addMedia(stream));
-                        this.connections[u].addEventListener('close', () => delete this.connections[u]);
+                        this.connections[u].addEventListener('close', () => {
+                            if(this._verbose) this._logger.log("connection closed, remove user", u);
+                            this.dispatchEvent('userdisconnected', [u]);
+                            delete this.connections[u];
+                        });
+                    });
+                    this.users.filter(u => msg.data.indexOf(u) === -1).forEach(u => {
+                        this.connections[u].close();
+                        this.dispatchEvent('userdisconnected', [u]);
+                        delete this.connections[u];
                     });
                     break;
             }
@@ -66,6 +79,7 @@ class ConnectionManager extends Listenable(){
         connection.addEventListener('streamremoved', (stream, track, mid) => this.dispatchEvent('streamremoved', [stream, connection.peer, track, mid]));
         connection.addEventListener('trackadded', (track, mid) => this.dispatchEvent('trackadded', [track, connection.peer, mid]));
         connection.addEventListener('trackremoved', (track, mid) => this.dispatchEvent('trackremoved', [track, connection.peer, mid]));
+        connection.addEventListener('close', () => this.dispatchEvent('connectionclosed', [connection.peer, connection]));
         connection.addEventListener('close', () => this.dispatchEvent('connectionclosed', [connection.peer, connection]));
     }
 
@@ -142,6 +156,15 @@ class ConnectionManager extends Listenable(){
         Object.values(this.connections).forEach(con => con.muteMedia(m, mute));
     }
 
+
+    toJSON(){
+        return {
+            "users": this.users,
+            "connections": Object.values(this.connections).map(c => c && c.toJSON ? c.toJSON() : c),
+            "verbose": this._verbose
+        }
+    }
+
     /**
      * get a report about the overall amount of bytes and packets currently sent over the managed connections and how many of them get dropped
      * @param {Number} [watchTime=1000] in order to get the byte throughput, one has to watch the connection for a time. This parameter specifies for how long. It takes the number of milliseconds and defaults to a second, so that you get bytes per second as a result
@@ -171,15 +194,20 @@ class ConnectionManager extends Listenable(){
 
     /**
      * closes all connections
-     * @param {Boolean} [remove=false] flag used to remove connections when closing them. Defaults to keeping the closed connections
      * */
-    close(remove=false){
-        this._signaler.close();
+    close(){
         Object.keys(this.connections)
             .forEach(user => {
                 this.connections[user].close();
-                if(remove) delete this.connections[user];
             });
+        this._closed = true;
+    }
+
+    /**
+     * check if the converence is closed
+     * */
+    get closed(){
+        return this._closed;
     }
 
 }

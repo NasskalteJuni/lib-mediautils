@@ -1,5 +1,7 @@
 const Listenable = require('./Listenable.js');
 const ID = () => new Date().getTime().toString(32) + Math.random().toString(32).substr(2,7);
+const extractReport = require('./_extractReportFromRTCPeerConnection.js');
+const toJSON = require('./_getJsonRepresentationOfConnection.js');
 
 /**
  * Introduces an abstraction layer around the RTCPeerConnection.
@@ -26,6 +28,7 @@ class Connection extends Listenable() {
      * */
     constructor({id = ID(), peer = null, name = null, signaler, iceServers = [], useUnifiedPlan = true, isYielding = undefined, verbose = false, logger=console} = {}) {
         super();
+        this._connectionType = "connectionWithRollback";
         this._signaler = signaler;
         this._connectionConfig = {iceServers, sdpSemantics: useUnifiedPlan ? 'unified-plan' : 'plan-b'};
         this._id = id;
@@ -35,6 +38,7 @@ class Connection extends Listenable() {
         this._verbose = verbose;
         this._isYielding = isYielding === undefined ? (this._name ? this._name.localeCompare(this._peer) > 0 : false) : isYielding;
         this._offering = false;
+        this._ignoredOffer = false;
         this._receivedStreams = [];
         this._receivedTracks = [];
         this._addedTracks = [];
@@ -79,10 +83,9 @@ class Connection extends Listenable() {
         this._connection.addEventListener('icecandidate', e => this._forwardIceCandidate(e.candidate));
         this._connection.addEventListener('negotiationneeded', () => this._startHandshake());
         this._connection.addEventListener('iceconnectionstatechange', () => this._handleIceChange());
-        this._connection.addEventListener('connectionstatechange', () => this._restartJammedConnectionAttempts());
         this._connection.addEventListener('track', ({track, streams}) => this._handleIncomingTrack(track, streams));
         this._connection.addEventListener('signalingstatechange', () => this._syncNewTransceivers());
-        if (this._verbose) this._logger.log('created new peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
+        if (this._verbose) this._logger.log('created new '+this._connectionType+' peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
     }
 
     /**
@@ -98,6 +101,8 @@ class Connection extends Listenable() {
             bugfix.muted = true;
             bugfix.autoplay = true;
             bugfix.srcObject = new MediaStream([track]);
+            bugfix.style.visibility = "hidden";
+            document.body.appendChild(bugfix);
         }
         const matches = this._connection.getTransceivers().filter(tr => tr.receiver.track && tr.receiver.track.id === track.id);
         const mid = matches.length > 0 ? matches[0].mid : null;
@@ -135,6 +140,7 @@ class Connection extends Listenable() {
      * */
     _forwardIceCandidate(candidate) {
         if (candidate !== null) {
+            if(this._verbose) this._logger.log('generated candidate for '+this._peer+':', candidate);
             this._signaler.send({
                 receiver: this._peer,
                 data: candidate,
@@ -152,9 +158,9 @@ class Connection extends Listenable() {
         if(msg.sender !== this._peer) return;
         const type = msg.type.toLowerCase();
         if(type === 'sdp'){
-            await this._handleSdp(msg.data);
+            await this._handleSignaling({description: msg.data});
         }else if(type === 'ice'){
-            await this._handleRemoteIceCandidate(msg.data)
+            await this._handleSignaling({candidate: msg.data})
         }else if(type === 'connection:close'){
             await this._handleClosingConnection();
         }else if(type === 'receiver:stop'){
@@ -172,66 +178,52 @@ class Connection extends Listenable() {
      * @private
      * */
     async _startHandshake(){
-        try{
-            if(this._verbose) this._logger.log('negotiation is needed');
+        try {
+            if(this._offering) return;
             this._offering = true;
             const offer = await this._connection.createOffer();
             if(this._connection.signalingState !== "stable") return;
-            if (this._verbose) this._logger.log('set local description on connection ' + this._id + ':', this._connection.localDescription);
             await this._connection.setLocalDescription(offer);
-            const msg = {
-                receiver: this._peer,
-                data: offer,
-                type: 'sdp',
-            };
-            this._signaler.send(msg);
-        }catch(err){
+            if (this._verbose) this._logger.log('set local description on connection ' + this._id + ':', this._connection.localDescription);
+            this._signaler.send({type: "sdp", data: this._connection.localDescription, receiver: this._peer});
+        } catch (err) {
             this._logger.error(err);
-        }finally{
+        } finally {
             this._offering = false;
         }
     }
 
-    /**
-     * add incoming ice candidates
-     * @private
-     * */
-    async _handleRemoteIceCandidate(candidate) {
-        if (candidate !== null){
-            try{
-                await this._connection.addIceCandidate(candidate);
-            }catch(err){
-                if(!this._ignoredOffer) throw err;
-            }
-        }
-    }
 
     /**
      * handles incoming sdp messages by either setting or ignoring them (in case of a glare situation where this endpoint waits for the other sites answer)
+     * Taken mostly from https://www.w3.org/TR/webrtc/#perfect-negotiation-example and adapted as needed
      * @private
      * */
-    async _handleSdp(description){
-        if(this._verbose) this._logger.log('received sdp', description);
-        try {
-            const collision = this._connection.signalingState !== "stable" || this._offering;
-            if(collision && this._verbose) this._logger.log("collision");
-            if ((this._ignoredOffer = !this._isYielding && description.type === "offer" && collision)) {
-                if(this._verbose) this._logger.log(this._id+' for '+this._peer+' ignored offer due to glare');
-                return;
-            } else if (collision && description.type === "offer"){
-                if(this._verbose) this._logger.log(this._id+' for '+this._peer+' handles glare by yielding');
-                await Promise.all([
-                    this._connection.setLocalDescription({type: "rollback"}),
-                    this._connection.setRemoteDescription(description)
-                ]);
-            }else{
-                await this._connection.setRemoteDescription(description);
+    async _handleSignaling({description, candidate}){
+        if(this._verbose) this._logger.log('received', description || candidate);
+        try{
+            if(description) {
+                if(description.type === "offer" && this._connection.signalingState !== "stable"){
+                    if(!this._isYielding) return;
+                    await Promise.all([
+                        this._connection.setLocalDescription({type: "rollback"}),
+                        this._connection.setRemoteDescription(description)
+                    ]);
+                }else{
+                    await this._connection.setRemoteDescription(description);
+                }
+                if(description.type === "offer"){
+                    await this._connection.setLocalDescription(await this._connection.createAnswer());
+                    this._signaler.send({
+                        type: "sdp",
+                        data: this._connection.localDescription,
+                        receiver: this._peer
+                    });
+                }
+            }else if(candidate){
+                await this._connection.addIceCandidate(candidate);
             }
-            if (description.type === "offer") {
-                await this._connection.setLocalDescription(await this._connection.createAnswer());
-                this._signaler.send({type: 'sdp', receiver: this._peer, data: this._connection.localDescription});
-            }
-        } catch (err) {
+        }catch(err){
             this._logger.error(err);
         }
     }
@@ -327,7 +319,7 @@ class Connection extends Listenable() {
      * @private
      * */
     _changeMetaOfTrack(mid, meta){
-        if(this._verbose) console.log('meta of track bound to transceiver '+mid+' will change to '+meta);
+        if(this._verbose) this._logger.log('meta of track bound to transceiver '+mid+' will change to '+meta);
         const matches = this._connection.getTransceivers().filter(tr => tr.mid === mid);
         if(matches.length && matches[0].receiver.track){
             const track = matches[0].receiver.track;
@@ -394,34 +386,18 @@ class Connection extends Listenable() {
      * @private
      * */
     _handleIceChange() {
-        // if the other side is away, close down the connection
+        // if the other side is away, you may close down the connection, see also: https://blog.mozilla.org/webrtc/ice-disconnected-not/
         if (this._connection.iceConnectionState === "disconnected"){
-            this._connection.close();
-            this.dispatchEvent('close', []);
+            if(this._verbose) this._logger.log("detected in-band disconnection");
+            this._signaler.send({type: "user:list", receiver: "@server", data: null});
         }
         // if the connection failed, restart the ice gathering process according to the spec, will lead to negotiationneeded event
         if(this._connection.iceConnectionState === "failed"){
-            this._connection.restartIce();
+            if(this._verbose) this._logger.log("detected ice failure, restart ice");
         }
     }
 
-    _restartJammedConnectionAttempts(){
-        const removeConnectionAttemptTimeout = () => {
-            clearTimeout(this._connectingAttemptTimeout);
-            this._connectingAttemptTimeout = undefined;
-        };
-        if(this._connection.connectionState === "connecting"){
-            this._connectingAttemptTimeout = setTimeout(async () => {
-                if(this._verbose) this._logger.log('connection exceeded time to connect and is assumed to be jammed, restarting ice gathering...');
-                removeConnectionAttemptTimeout();
-                if(this._connection.signalingState === "have-local-offer") await this._connection.setLocalDescription({type: "rollback"});
-                this._connection.restartIce();
-                this._connection.dispatchEvent(new Event('negotiationneeded'));
-            }, 3000 + Math.random()*2000);
-        }else{
-            removeConnectionAttemptTimeout();
-        }
-    }
+
 
     /**
      * add media to the connection
@@ -437,9 +413,10 @@ class Connection extends Listenable() {
             this._addTrackToConnection(arguments[0], arguments[1]);
         } else {
             if (media instanceof MediaStream) {
-                media.getTracks().forEach(track => {
-                    if(media.meta) track.meta = media.meta;
-                    this._addTrackToConnection(track, [media])
+                const stream = media;
+                stream.getTracks().forEach(track => {
+                    if(stream.meta) track.meta = stream.meta;
+                    this._addTrackToConnection(track, [stream])
                 });
             } else if (media instanceof MediaStreamTrack) {
                 this._addTrackToConnection(media, [new MediaStream([media])]);
@@ -527,6 +504,7 @@ class Connection extends Listenable() {
      * close the connection
      * */
     close() {
+        if(this._verbose) this._logger.log("actively shutting down connection "+this._id+" for peer "+this._peer)
         const msg = {
             receiver: this._peer,
             data: 'immediately',
@@ -546,58 +524,17 @@ class Connection extends Listenable() {
     }
 
 
+    toJSON(){
+        return toJSON(this._connection);
+    }
+
     /**
      * get a report of the inbound and outbound byte and packet transmission rate as also the packet-loss for this peer connection as an Object
      * @param {Number} [watchTime=1000] the time to gather the data transmission rates in milliseconds. Defaults to 1 Second, ergo 1000 ms.
      * @return Promise resolves with an performance report Object containing inbound and outbound dictionaries with the keys bytes, packets and packetLoss
      * */
     async getReport(watchTime = 1000){
-        const getRelevantValues = statValueDict => {
-            const val = {inbound: {bytes: 0, packets: 0, packetLoss: 0}, outbound: {bytes: 0, packets: 0, packetLoss: 0}, timestamp: 0};
-            for(let stat of statValueDict){
-                if(stat.type === 'inbound-rtp'){
-                    val.inbound.bytes += stat.bytesReceived;
-                    val.inbound.packets += stat.packetsReceived;
-                    val.inbound.packetLoss += stat.packetsLost;
-                }else if(stat.type === 'outbound-rtp'){
-                    val.outbound.bytes += stat.bytesSent;
-                    val.outbound.packets += stat.packetsSent;
-                }else if(stat.type === 'remote-inbound-rtp'){
-                    val.outbound.packetLoss += stat.packetsLost;
-                }else if(stat.type === 'peer-connection'){
-                    val.timestamp = stat.timestamp;
-                }
-            }
-            return val;
-        };
-        return new Promise(async(resolve, reject) => {
-            try{
-                const statsAtStart = (await this._connection.getStats()).values();
-                setTimeout(async () => {
-                    const statsAtEnd = (await this._connection.getStats()).values();
-                    const valuesAtStart = getRelevantValues(statsAtStart);
-                    const valuesAtEnd = getRelevantValues(statsAtEnd);
-                    const duration = valuesAtEnd.timestamp - valuesAtStart.timestamp;
-                    resolve({
-                        inbound: {
-                            bytes: valuesAtEnd.inbound.bytes-valuesAtStart.inbound.bytes,
-                            packets: valuesAtEnd.inbound.packets-valuesAtStart.inbound.packets,
-                            packetLoss: valuesAtEnd.inbound.packetLoss-valuesAtStart.inbound.packetLoss,
-                            tracks: this._connection.getTransceivers().filter(tr => tr.currentDirection !== "inactive" && (tr.direction === "sendrecv" || tr.direction === "recvonly") && tr.receiver.track && tr.receiver.track.readyState === "live").length
-                        },
-                        outbound: {
-                            bytes: valuesAtEnd.outbound.bytes-valuesAtStart.outbound.bytes,
-                            packets: valuesAtEnd.outbound.packets-valuesAtStart.outbound.packets,
-                            packetLoss: valuesAtEnd.outbound.packetLoss-valuesAtStart.outbound.packetLoss,
-                            tracks: this._connection.getTransceivers().filter(tr => tr.currentDirection !== "inactive" && (tr.direction === "sendrecv" || tr.direction === "sendonly") && tr.sender.track && tr.sender.track.readyState === "live").length
-                        },
-                        duration,
-                    });
-                }, watchTime);
-            }catch(err){
-                reject(err);
-            }
-        });
+        return extractReport(this._connection, watchTime);
     }
 
 }

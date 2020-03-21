@@ -1,6 +1,7 @@
 const Listenable = require('./Listenable.js');
 const ID = () => new Date().getTime().toString(32) + Math.random().toString(32).substr(2,7);
-const timestamp = () => new Date().toISOString();
+const extractReport = require('./_extractReportFromRTCPeerConnection.js');
+const toJSON = require('./_getJsonRepresentationOfConnection.js');
 
 /**
  * Introduces an abstraction layer around the RTCPeerConnection.
@@ -24,8 +25,9 @@ class Connection extends Listenable() {
      * @param config.verbose [boolean=false] set to true to log the steps in the signaling and media handling process
      * @param config.logger [Logger=loglevel] a logger to be used. Can be the widely used console object, defaults to an instance of the loglevel library
      * */
-    constructor({id = ID(), peer = null, name = null, signaler, iceServers = [{"urls": "stun:stun1.l.google.com:19302"}], useUnifiedPlan = true, isYielding = undefined, verbose = false, logger=console} = {}) {
+    constructor({id = ID(), peer = null, name = null, signaler, iceServers = [], useUnifiedPlan = true, isYielding = undefined, verbose = false, logger=console} = {}) {
         super();
+        this._connectionType = "connectionWithSignaledLock";
         this._signaler = signaler;
         this._connectionConfig = {iceServers, sdpSemantics: useUnifiedPlan ? 'unified-plan' : 'plan-b'};
         this._id = id;
@@ -92,7 +94,7 @@ class Connection extends Listenable() {
         this._connection.addEventListener('iceconnectionstatechange', () => this._handleIceChange());
         this._connection.addEventListener('track', ({track, streams}) => this._handleIncomingTrack(track, streams));
         this._connection.addEventListener('signalingstatechange', () => this._syncNewTransceivers());
-        if (this._verbose) this._logger.log('created new peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
+        if (this._verbose) this._logger.log('created new '+this._connectionType+' peer connection (' + this._id + ') using ' + (this._connectionConfig.sdpSemantics === 'unified-plan' ? 'the standard' : 'deprecated chrome plan b') + ' sdp semantics');
     }
 
 
@@ -149,7 +151,6 @@ class Connection extends Listenable() {
             this._signaler.send({
                 receiver: this._peer,
                 data: candidate,
-                sent: timestamp(),
                 type: 'ice'
             });
         }
@@ -174,7 +175,6 @@ class Connection extends Listenable() {
             receiver: this._peer,
             data: null,
             type: 'lock:init',
-            sent: timestamp()
         };
         this._signaler.send(msg);
         this.dispatchEvent('locked', []);
@@ -236,7 +236,6 @@ class Connection extends Listenable() {
             receiver: this._peer,
             type: 'lock:accept',
             data: null,
-            sent: timestamp()
         });
     }
 
@@ -257,7 +256,6 @@ class Connection extends Listenable() {
             receiver: this._peer,
             type: 'sdp',
             data: offer,
-            sent: timestamp()
         });
         if(this._verbose) this._logger.log(this._name, 'initiates offer-answer exchange');
     }
@@ -285,7 +283,6 @@ class Connection extends Listenable() {
                 receiver: this._peer,
                 type: 'sdp',
                 data: answer,
-                sent: timestamp()
             });
             if(this._verbose) this._logger.log(this._name, 'answers received offer');
         }else{
@@ -294,12 +291,11 @@ class Connection extends Listenable() {
                 receiver: this._peer,
                 type: 'lock:release',
                 data: null,
-                sent: timestamp()
             });
             this._locked = false;
             if(this._verbose) this._logger.log(this._name, 'unlocks connection after complete offer-answer exchange');
             this.dispatchEvent('unlock', []);
-            if(this._queued) this.dispatchEvent('lockneeded', []);
+            if(this._queued || this._queuedMedia.length > 0) this.dispatchEvent('lockneeded', []);
         }
     }
 
@@ -311,7 +307,7 @@ class Connection extends Listenable() {
         this._locked = false;
         if(this._verbose) this._logger.log(this._name, 'unlocking connection');
         this.dispatchEvent('unlock', []);
-        if(this._queued) this.dispatchEvent('lockneeded', []);
+        if(this._queued || this._queuedMedia.length > 0) this.dispatchEvent('lockneeded', []);
     }
 
     /**
@@ -354,7 +350,6 @@ class Connection extends Listenable() {
                         receiver: this._peer,
                         type: 'receiver:stop',
                         data: transceiver.mid,
-                        sent: timestamp()
                     });
                     removed++;
                 }
@@ -441,16 +436,20 @@ class Connection extends Listenable() {
         const searchingActualTrack = track instanceof MediaStreamTrack;
         const searchingTrackKind = typeof track === "string" && (['audio', 'video', '*'].indexOf(track) >= 0);
         this._connection.getTransceivers().forEach(transceiver => {
-            if((searchingActualTrack && transceiver.sender.track.id === track.id) || (searchingTrackKind && (track === '*' || transceiver.sender.track.kind === track))){
-                if(muted){
-                    if(!transceiver.sender._muted){
-                        transceiver.sender._muted = transceiver.sender.track;
-                        transceiver.sender.replace(null)
-                    }
-                }else{
-                    if(transceiver.sender._muted){
-                        transceiver.sender.replace(transceiver.sender._muted);
-                        delete transceiver.sender['_muted'];
+            if(muted ? transceiver.sender.track : transceiver.sender._muted){
+                const trackAndNotMuted = () => (searchingActualTrack && transceiver.sender.track.id === track.id) || (searchingTrackKind && (track === '*' || transceiver.sender.track.kind === track));
+                const trackAndMuted = () => (searchingActualTrack && transceiver.sender._muted.id === track.id) || (searchingTrackKind && (track === '*' || transceiver.sender._muted.kind === track));
+                if(muted ? trackAndNotMuted() : trackAndMuted()){
+                    if(muted){
+                        if(!transceiver.sender._muted){
+                            transceiver.sender._muted = transceiver.sender.track;
+                            transceiver.sender.replaceTrack(null)
+                        }
+                    }else{
+                        if(transceiver.sender._muted){
+                            transceiver.sender.replaceTrack(transceiver.sender._muted);
+                            delete transceiver.sender['_muted'];
+                        }
                     }
                 }
             }
@@ -464,12 +463,12 @@ class Connection extends Listenable() {
     _handleIceChange() {
         // if the other side is away, close down the connection
         if (this._connection.iceConnectionState === "disconnected"){
-            this._connection.close();
-            this.dispatchEvent('close', []);
+            if(this._verbose) this._logger.log("detected in-band disconnection for "+this._peer);
+            this._signaler.send({type: "user:list", receiver: "@server"})
         }
         // if the connection failed, restart the ice gathering process according to the spec, will lead to negotiationneeded event
         if(this._connection.iceConnectionState === "failed"){
-            this._connection.restartIce();
+            if(this._verbose) this._logger.log("ice failed for "+this._peer);
         }
     }
 
@@ -491,9 +490,10 @@ class Connection extends Listenable() {
             this._addTrackToConnection(arguments[0], arguments[1]);
         } else {
             if (media instanceof MediaStream) {
-                media.getTracks().forEach(track => {
+                const stream = media;
+                stream.getTracks().forEach(track => {
                     if(stream.meta) track.meta = stream.meta;
-                    queue(track, [media])
+                    queue(track, [stream])
                 });
             } else if (media instanceof MediaStreamTrack) {
                 queue(media, [new MediaStream([media])]);
@@ -523,6 +523,25 @@ class Connection extends Listenable() {
             queue(media);
         } else if(typeof media === undefined || arguments.length === 0 || (typeof media === "string" && media === "*")){
             queue("*");
+        } else {
+            this._logger.error('unknown media type', typeof media, media);
+        }
+    }
+
+
+    /**
+     * mute the given media
+     * @param {String|MediaStream|MediaStreamTrack} media The media or media kind to mute
+     * @param {Boolean} [mute=true] Flag to define if you want to mute or unmute media
+     * @ignore
+     * */
+    muteMedia(media, mute=true){
+        if(media instanceof MediaStream) {
+            media.getTracks().forEach(track => this._muteTrack(track, mute));
+        } else if ((media instanceof MediaStreamTrack) || (typeof media === "string" && ["audio", "video", "*"].indexOf(media) >= 0)) {
+            this._muteTrack(media, mute)
+        } else if(typeof media === undefined || arguments.length === 0 || (typeof media === "string" && media === "*")){
+            this._muteTrack("*", mute);
         } else {
             this._logger.error('unknown media type', typeof media, media);
         }
@@ -576,7 +595,6 @@ class Connection extends Listenable() {
             receiver: this._peer,
             data: 'immediately',
             type: 'connection:close',
-            sent: timestamp()
         };
         this._signaler.send(msg);
         this._connection.close();
@@ -590,6 +608,20 @@ class Connection extends Listenable() {
      * */
     get closed() {
         return this._connection.connectionState === "closed" || this._connection.signalingState === "closed";
+    }
+
+    /**
+     * @ignore
+     * */
+    toJSON(){
+        return toJSON(this);
+    }
+
+    /**
+     * @ignore
+     */
+    async getReport(watchTime=1000){
+        return extractReport(this._connection, watchTime);
     }
 
 }
