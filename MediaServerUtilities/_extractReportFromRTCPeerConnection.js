@@ -18,6 +18,16 @@ module.exports = async function getReport(rtcPeerConnection, watchTime = 1000){
                 val.outbound.packetLoss += stat.packetsLost;
             }else if(stat.type === 'peer-connection'){
                 val.timestamp = stat.timestamp;
+            }else if(stat.type === 'track' && stat.framesReceived !== undefined){
+                val.inbound.framesReceived = stat.framesReceived;
+                val.inbound.resolution = stat.frameWidth+'/'+stat.frameHeight;
+            }else if(stat.type === 'media-source' && stat.framesPerSecond !== undefined){
+                val.outbound.framesPerSecond = stat.framesPerSecond;
+                val.outbound.resolution = stat.width+'/'+stat.height;
+            }else if(stat.type === 'media-source' && stat.totalAudioEnergy !== undefined){
+                val.outbound.audioEnergy = stat.totalAudioEnergy;
+            }else if(stat.type === 'track' && stat.totalAudioEnergy !== undefined){
+                val.inbound.audioEnergy = stat.totalAudioEnergy;
             }
         }
         return val;
@@ -35,15 +45,24 @@ module.exports = async function getReport(rtcPeerConnection, watchTime = 1000){
                         bytes: valuesAtEnd.inbound.bytes-valuesAtStart.inbound.bytes,
                         packets: valuesAtEnd.inbound.packets-valuesAtStart.inbound.packets,
                         packetLoss: valuesAtEnd.inbound.packetLoss-valuesAtStart.inbound.packetLoss,
+                        totalPacketLoss: valuesAtEnd.inbound.packetLoss,
+                        fps: valuesAtEnd.inbound.framesReceived-valuesAtStart.inbound.framesReceived,
+                        audioEnergy: valuesAtEnd.inbound.audioEnergy,
+                        resolution: valuesAtEnd.inbound.resolution,
                         tracks: rtcPeerConnection.getTransceivers().filter(tr => tr.currentDirection !== "inactive" && (tr.direction === "sendrecv" || tr.direction === "recvonly") && tr.receiver.track && tr.receiver.track.readyState === "live").length
                     },
                     outbound: {
                         bytes: valuesAtEnd.outbound.bytes-valuesAtStart.outbound.bytes,
                         packets: valuesAtEnd.outbound.packets-valuesAtStart.outbound.packets,
                         packetLoss: valuesAtEnd.outbound.packetLoss-valuesAtStart.outbound.packetLoss,
+                        totalPacketLoss: valuesAtEnd.outbound.packetLoss,
+                        fps: valuesAtEnd.outbound.framesPerSecond,
+                        audioEnergy: valuesAtEnd.outbound.audioEnergy,
+                        resolution: valuesAtEnd.outbound.resolution,
                         tracks: rtcPeerConnection.getTransceivers().filter(tr => tr.currentDirection !== "inactive" && (tr.direction === "sendrecv" || tr.direction === "sendonly") && tr.sender.track && tr.sender.track.readyState === "live").length
                     },
                     duration,
+                    timestamp: new Date().toISOString(),
                 });
             }, watchTime);
         }catch(err){

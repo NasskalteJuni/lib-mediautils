@@ -47,8 +47,12 @@ module.exports = class Conference extends Listenable(){
         });
         this._peers.addEventListener('trackadded', (track, user) => {
             if(this._architecture.value === 'mesh'){
-                this._videoMixer.addMedia(track, 'peers-'+user);
-                if(track.kind === "audio") this._speechDetection.addMedia(track, 'peers-'+user);
+                if(track.kind === "video"){
+                    this._videoMixer.addMedia(track, 'peers-'+user);
+                }else if(track.kind === "audio"){
+                    this._speechDetection.addMedia(track, 'peers-'+user);
+                    this._audioMixer.addMedia(track, 'peers-'+user);
+                }
                 this.dispatchEvent('trackadded', [track, user]);
                 this.dispatchEvent('mediachanged', []);
             }
@@ -57,8 +61,12 @@ module.exports = class Conference extends Listenable(){
             if(this._architecture.value === 'sfu'){
                 const addTrack = track => {
                     console.log('adding track', track, 'for', track.meta);
-                    this._videoMixer.addMedia(track, 'sfu-'+track.meta);
-                    if(track.kind === "audio") this._speechDetection.addMedia(track, 'sfu-'+track.meta);
+                    if(track.kind === "video"){
+                        this._videoMixer.addMedia(track, 'sfu-'+track.meta);
+                    }else if(track.kind === "audio"){
+                        this._speechDetection.addMedia(track, 'sfu-'+track.meta);
+                        this._audioMixer.addMedia(track, 'sfu-'+track.meta);
+                    }
                     this.dispatchEvent('trackadded', [track, track.meta]);
                     this.dispatchEvent('mediachanged', []);
                 };
@@ -69,8 +77,8 @@ module.exports = class Conference extends Listenable(){
         this._mcu.addEventListener('trackadded', () => {
             this._updateDisplayedStream();
         });
-        this._peers.addEventListener('userconnected', user => this.dispatchEvent('userconnected', [user]));
-        this._peers.addEventListener('userdisconnected', user => this.dispatchEvent('userdisconnected', [user]));
+        this._peers.addEventListener('userconnected', user => this._handleUserConnected(user));
+        this._peers.addEventListener('userdisconnected', user => this._handleUserDisconnected(user));
         this._peers.addEventListener('connectionclosed', user => {
             if(this._architecture.value === 'mesh'){
                 this._videoMixer.removeMedia('peers-'+user);
@@ -137,6 +145,28 @@ module.exports = class Conference extends Listenable(){
         this._updateDisplayedStream();
         this._getArchitectureHandler(previousArchitecture).removeMedia();
         this.dispatchEvent('architectureswitched', [newArchitecture, previousArchitecture]);
+    }
+
+
+    /**
+     * @private
+     * */
+    _handleUserConnected(user){
+        this.dispatchEvent('userconnected', [user]);
+        // mcu or sfu take care of automatic forwarding, but mesh needs to add media itself
+        if(this._architecture.value === 'mesh'){
+            this._addedMedia.forEach(m => this._getArchitectureHandler('mesh').get(user).addMedia(m));
+        }
+    }
+
+    /**
+     * @private
+     * */
+    _handleUserDisconnected(user){
+        this.dispatchEvent('userdisconnected', [user]);
+        if(this._architecture.value === 'mesh'){
+            if(this._getArchitectureHandler('mesh').get(user)) this._getArchitectureHandler('mesh').get(user).close();
+        }
     }
 
     /**
