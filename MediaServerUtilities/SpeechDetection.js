@@ -13,14 +13,14 @@ class SpeechDetection extends Listenable(){
      * which checks which given media streams or tracks are currently loud enough for typical human speech
      * (key parts were directly taken from or inspired by hark.js https://github.com/latentflip/hark/)
      * @param {Object} [config]
-     * @param {Number} [config.threshold=-70] A dBFS measure. Positive numbers will be made negative. Defaults to -70, which is approximately the loudness of human voices
+     * @param {Number} [config.threshold=-65] A dBFS measure. Positive numbers will be made negative. Defaults to -70, which is approximately the loudness of human voices
      * @param {Number} [config.samplingInterval=100] Milliseconds between samples. Higher sample rate equals earlier detection but also more cpu cost
      * @param {Number} [config.smoothingConstant=0.1] Smoothes input to avoid peaks, set values with caution
-     * @param {Number} [config.requiredSamplesForSpeech=5] How many consecutive samples must have an average dBFS value over threshold to be considered speech
+     * @param {Number} [config.requiredSamplesForSpeech=7] How many consecutive samples must have an average dBFS value over threshold to be considered speech
      * @param {Boolean} [config.verbose=false] Logging on events if true
      * @param {console} [config.logger=console] A logger to use, defaults to browser console, only used when verbose is set to true
      * */
-    constructor({threshold=-70, samplingInterval=100, smoothingConstant=0.1, requiredSamplesForSpeech=5, verbose=false, logger=console} = {}){
+    constructor({threshold=-65, samplingInterval=100, smoothingConstant=0.1, requiredSamplesForSpeech=7, verbose=false, logger=console} = {}){
         super();
         this._smoothingConstant = 0.1;
         this._samplingInterval = 100; //ms
