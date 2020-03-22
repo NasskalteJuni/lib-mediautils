@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>audio mixing</title>
+    <script src="../../dist/mediautils.js"></script>
+</head>
+<body>
+<div id="audioIsInactive">
+    <button id="start">click this to avoid chromes regulations on web audio</button>
+</div>
+<div id="audioIsActive" style="display: none;">
+    <button id="addAudioSource1">add audio generator 1 to mixing</button><br>
+    <button id="addAudioSource2">add audio generator 2 to mixing</button><br>
+    <button id="setOutput">add output to page</button>
+    <button id="addAudioSource1ToPage">add audio generator 1 to page</button>
+    <button id="addAudioSource2ToPage">add audio generator 2 to page</button>
+</div>
+<audio id="output" autoplay></audio>
+<script>
+    const output = document.getElementById("output");
+    const button = document.getElementById("start");
+    const audioIsActiveContainer = document.getElementById("audioIsActive");
+    const audioIsInactiveContainer = document.getElementById("audioIsInactive");
+    const addAudio1Button = document.getElementById("addAudioSource1");
+    const addAudio2Button = document.getElementById("addAudioSource2");
+    const addAudio1ButtonToPage = document.getElementById("addAudioSource1ToPage");
+    const addAudio2ButtonToPage = document.getElementById("addAudioSource2ToPage");
+    const addAudioToPageButton = document.getElementById("setOutput");
+    window.isActive = false;
+    button.addEventListener("click", () => {
+        window.audioMixer = new MediaUtilities.AudioMixer();
+        window.isActive = true;
+        audioIsActiveContainer.style.display = "block";
+        audioIsInactiveContainer.style.display = "none";
+        window.audioGenerator1 = new MediaUtilities.PlaceHolderMediaGenerator({enable: true, audioFrequency: 800, audioWave: "sawtooth"});
+        window.audioGenerator2 = new MediaUtilities.PlaceHolderMediaGenerator({enable: true, audioFrequency: 400});
+        addAudio1Button.addEventListener("click", () => {
+            audioMixer.addMedia(audioGenerator1.audioTrack);
+            addAudio1Button.disable;
+        });
+        addAudio2Button.addEventListener("click", () => {
+            audioMixer.addMedia(audioGenerator2.audioTrack);
+            addAudio2Button.disable
+        });
+        addAudio1ButtonToPage.addEventListener("click", () => output.srcObject = new MediaStream([audioGenerator1.audioTrack]));
+        addAudio2ButtonToPage.addEventListener("click", () => output.srcObject = new MediaStream([audioGenerator2.audioTrack]));
+        addAudioToPageButton.addEventListener("click", () => output.srcObject = audioMixer.out);
+    });
+</script>
+</body>
+</html>

@@ -10,7 +10,8 @@ class AudioMixer{
      * */
     constructor(){
         this._context = new AudioContext();
-        this._out = this._context.createMediaStreamDestination();
+        this._destination = this._context.createMediaStreamDestination();
+        this._out = this._destination.stream;
         this._in = {};
     }
 
@@ -19,7 +20,7 @@ class AudioMixer{
      * @readonly
      * */
     get out(){
-        return this._out.stream;
+        return this._out;
     }
 
     /**
@@ -27,7 +28,7 @@ class AudioMixer{
      * @readonly
      * */
     get outputTrack(){
-        return this._out.stream.getAudioTracks()[0];
+        return this._out.getAudioTracks()[0];
     }
 
     /**
@@ -61,7 +62,7 @@ class AudioMixer{
         if(this._merger) this._merger.disconnect();
         if(!inputs.length) return;
         this._merger = this._context.createChannelMerger(inputs.length);
-        this._merger.connect(this._context.destination);
+        this._merger.connect(this._destination);
         inputs.forEach((input, i) => input.connect(this._merger, 0, i));
     }
 

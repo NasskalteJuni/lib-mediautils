@@ -33,7 +33,7 @@ class Connection extends Listenable() {
         this._id = id;
         this._peer = peer || this._id;
         this._name = name;
-        this._signaler.addEventListener('message', msg => this._handleSignallingMessage(msg));
+        this._signaler.addEventListener('message', msg => this._handleSignalingMessage(msg));
         this._verbose = verbose;
         this._isYielding = isYielding === undefined ? (this._name ? this._name.localeCompare(this._peer) > 0 : false) : isYielding;
         this._locked = false;
@@ -186,7 +186,7 @@ class Connection extends Listenable() {
      * @ignore
      * @private
      * */
-    async _handleSignallingMessage(msg) {
+    async _handleSignalingMessage(msg) {
         // when someone else sent the message, it is obviously of none interest to the connection between the peer and us
         if(msg.sender !== this._peer) return;
         const type = msg.type.toLowerCase();
@@ -598,6 +598,7 @@ class Connection extends Listenable() {
         };
         this._signaler.send(msg);
         this._connection.close();
+        this._handleSignalingMessage = () => {};
         this.dispatchEvent('close');
     }
 
