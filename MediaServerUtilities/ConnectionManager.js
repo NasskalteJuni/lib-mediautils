@@ -179,10 +179,16 @@ class ConnectionManager extends Listenable(){
                 complete.inbound.packets += r.inbound.packets;
                 complete.inbound.packetLoss += r.inbound.packetLoss;
                 complete.inbound.tracks += r.inbound.tracks;
+                complete.inbound.audioEnergy += Math.floor(r.inbound.audioEnergy/reports.length);
+                complete.inbound.fps += Math.floor(r.inbound.audioEnergy/reports.length);
+                complete.inbound.totalPacketLoss += r.inbound.totalPacketLoss;
                 complete.outbound.bytes += r.outbound.bytes;
                 complete.outbound.packets += r.outbound.packets;
                 complete.outbound.packetLoss += r.outbound.packetLoss;
                 complete.outbound.tracks += r.outbound.tracks;
+                complete.outbound.audioEnergy += Math.floor(r.outbound.audioEnergy/reports.length);
+                complete.outbound.fps += Math.floor(r.outbound.fps/reports.length);
+                complete.outbound.totalPacketLoss += r.outbound.totalPacketLoss;
                 complete.duration += Math.floor(r.duration/reports.length);
             }, report);
         }catch (err) {

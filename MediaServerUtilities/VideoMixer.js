@@ -13,12 +13,12 @@ class VideoMixer extends Videos(Configurations()){
      * create a new video mixer
      * @param config [object] a configuration object
      * @param config.canvas (optional) a canvas element to use for mixing MediaStreams together. Can be null (default, creates new), an element, or a query selector string like 'div.main>#canvas'
-     * @param config.fps [int=30] frames per second used for mixing & sampling
+     * @param config.fps [int=10] frames per second used for mixing & sampling
      * @param config.startImmediately [boolean=true] tells the mixer to start the mixing as soon as the object is constructed (no waiting for call to .start())
      * @param config.width [int=-1] the width of a newly created canvas, -1 is used to infer the width automatically
      * @param config.height [int=-1] the height of a newly created canvas, -1 is used to infer the width automatically
      * */
-    constructor({canvas = null, fps = 30, startImmediately = true, width=-1, height=-1} = {}){
+    constructor({canvas = null, fps = 10, startImmediately = true, width=-1, height=-1} = {}){
         super();
         this._width = width;
         this._height = height;

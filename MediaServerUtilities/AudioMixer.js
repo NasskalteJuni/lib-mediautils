@@ -59,11 +59,11 @@ class AudioMixer{
      * */
     _rebuildGraph(){
         const inputs = Object.values(this._in);
-        if(this._merger) this._merger.disconnect();
         if(!inputs.length) return;
-        this._merger = this._context.createChannelMerger(inputs.length);
-        this._merger.connect(this._destination);
-        inputs.forEach((input, i) => input.connect(this._merger, 0, i));
+        inputs.forEach(source => {
+            source.disconnect();
+            source.connect(this._destination);
+        });
     }
 
     /**

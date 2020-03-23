@@ -8,9 +8,10 @@ const SpeechDetection = require('./SpeechDetection.js');
 const Architecture = require('./_Architecture.js');
 
 /**
- * @class Utility to transmit your media to other conference members using a specified architecture
+ * Utility to transmit your media to other conference members using a specified architecture
+ * @class
  * */
-module.exports = class Conference extends Listenable(){
+class ConferenceWithLocalMixing extends Listenable(){
 
     /**
      * create a new conference that exchanges your media streams with other conference members using multiple architectures,
@@ -357,15 +358,23 @@ module.exports = class Conference extends Listenable(){
         }
     }
 
+
     /**
-     * define on which video element the conference should be displayed on
-     * @param element the element to use as a display. Can be a video element or a query selector string to find one
+     * define a container element that contains the video in which the conference should be displayed on
+     * @param {Node|String} element the element to use as a container. Can be a div (or similar) or a query selector string to find one
+     * @return {Node} the video element created to display the mixed content
      * */
     displayOn(element){
         if(typeof element === 'string') element = document.querySelector(element);
-        this._display = element;
-        if(this._verbose) this._logger.log('display output on', element);
+        element.innerHTML = "";
+        this._display = document.createElement("video");
+        this._display.autoplay = true;
+        this._display.style.width = "100%";
+        this._display.style.height = "100%";
+        element.appendChild(this._display);
+        if(this._verbose) this._logger.log('display output inside', element);
         this._updateDisplayedStream();
+        return this._display;
     }
 
     /**
@@ -411,3 +420,5 @@ module.exports = class Conference extends Listenable(){
     }
 
 };
+
+module.exports = ConferenceWithLocalMixing;
