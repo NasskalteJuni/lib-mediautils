@@ -25,7 +25,7 @@ class Speaker extends VideoMixingConfiguration{
             if(idIsNowSpeaking(stats.id, stats.drawIndex)){
                 return speechDetection.silence ? silenceOffset : noiseOffset;
             }else{
-                return smallFrameOffset + stats.drawIndex*smallFrameWidth;
+                return smallFrameOffset + Math.max(0, stats.drawIndex-1)*smallFrameWidth;
             }
         };
         const frameY = stats => {

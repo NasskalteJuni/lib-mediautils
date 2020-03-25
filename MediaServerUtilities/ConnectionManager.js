@@ -77,7 +77,10 @@ class ConnectionManager extends Listenable(){
         connection.addEventListener('mediachanged', e => this.dispatchEvent('mediachanged', [e]));
         connection.addEventListener('streamadded', (stream, track, mid) => this.dispatchEvent('streamadded', [stream, connection.peer, track, mid]));
         connection.addEventListener('streamremoved', (stream, track, mid) => this.dispatchEvent('streamremoved', [stream, connection.peer, track, mid]));
-        connection.addEventListener('trackadded', (track, mid) => this.dispatchEvent('trackadded', [track, connection.peer, mid]));
+        connection.addEventListener('trackadded', (track, mid) => {
+            if(!track.meta) track.meta = connection.peer;
+            this.dispatchEvent('trackadded', [track, connection.peer, mid])
+        });
         connection.addEventListener('trackremoved', (track, mid) => this.dispatchEvent('trackremoved', [track, connection.peer, mid]));
         connection.addEventListener('close', () => this.dispatchEvent('connectionclosed', [connection.peer, connection]));
         connection.addEventListener('close', () => this.dispatchEvent('connectionclosed', [connection.peer, connection]));

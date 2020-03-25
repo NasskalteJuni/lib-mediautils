@@ -1,9 +1,6 @@
 const ConnectionManager = require('./ConnectionManager.js');
 const Connection = require('./ConnectionWithSignaledLock.js');
-const VideoMixer = require('./VideoMixer.js');
-const AudioMixer = require('./AudioMixer.js');
 const Listenable = require('./Listenable.js');
-const SpeakerConfig = require('./VideoMixingConfigurations/Speaker.js');
 const SpeechDetection = require('./SpeechDetection.js');
 const Architecture = require('./_Architecture.js');
 
@@ -20,12 +17,11 @@ class Conference extends Listenable(){
      * @param {String} config.name your username in the conference
      * @param {Signaler} config.signaler The signaler to use to communicate the necessary data to transmit media between the conference members
      * @param {String} [config.architecture='mesh'] The architecture (name) to start with. Defaults to the purely peer to peer based mesh model
-     * @param {Object} [config.video={width:640, height:480}] The video size to preferably use
      * @param {Array} [config.iceServers=[]] The ice servers to use, in the common RTCIceServer-format
      * @param {Console} [config.logger=console] The logger to use. Anything with .log() and .error() method should work. Defaults to the browser console
      * @param {Boolean} [config.verbose=false] If you want to log (all) information or not
      * */
-    constructor({name, signaler, architecture= 'mesh', iceServers = [], video = {width: 640, height: 480}, verbose = false, logger = console}){
+    constructor({name, signaler, architecture= 'mesh', iceServers = [], verbose = false, logger = console}){
         super();
         this._name = name;
         this._signaler = signaler;
@@ -35,9 +31,7 @@ class Conference extends Listenable(){
         this._sfu = new Connection({signaler, name, iceServers, peer: '@sfu', isYielding: false, verbose, logger});
         this._mcu = new Connection({signaler, name, iceServers, peer: '@mcu', isYielding: false, verbose, logger});
         this._speechDetection = new SpeechDetection({threshold: 65});
-        this._videoMixer = new VideoMixer(video);
-        this._videoMixer.addConfig(new SpeakerConfig(this._speechDetection), 'speaker');
-        this._audioMixer = new AudioMixer();
+        this._updateInterval = this._createUpdateInterval();
         this._architecture = new Architecture(architecture);
         this._addedMedia = [];
         this._display = null;
@@ -46,49 +40,17 @@ class Conference extends Listenable(){
                 this._handleArchitectureSwitch(message.data);
             }
         });
-        this._peers.addEventListener('trackadded', (track, user) => {
-            if(this._architecture.value === 'mesh'){
-                if(track.kind === "video"){
-                    this._videoMixer.addMedia(track, 'peers-'+user);
-                }else if(track.kind === "audio"){
-                    this._speechDetection.addMedia(track, 'peers-'+user);
-                    this._audioMixer.addMedia(track, 'peers-'+user);
-                }
-                this.dispatchEvent('trackadded', [track, user]);
-                this.dispatchEvent('mediachanged', []);
-            }
-        });
-        this._sfu.addEventListener('trackadded', track => {
-            if(this._architecture.value === 'sfu'){
-                const addTrack = track => {
-                    console.log('adding track', track, 'for', track.meta);
-                    if(track.kind === "video"){
-                        this._videoMixer.addMedia(track, 'sfu-'+track.meta);
-                    }else if(track.kind === "audio"){
-                        this._speechDetection.addMedia(track, 'sfu-'+track.meta);
-                        this._audioMixer.addMedia(track, 'sfu-'+track.meta);
-                    }
-                    this.dispatchEvent('trackadded', [track, track.meta]);
-                    this.dispatchEvent('mediachanged', []);
-                };
-                if(track.meta) addTrack(track);
-                else track.addEventListener('metachanged', () => addTrack(track, track.meta));
-            }
-        });
-        this._mcu.addEventListener('trackadded', () => {
-            this._updateDisplayedStream();
-        });
         this._peers.addEventListener('userconnected', user => this._handleUserConnected(user));
+        this._peers.addEventListener('mediachanged', () => this._displayEveryTrack());
         this._peers.addEventListener('userdisconnected', user => this._handleUserDisconnected(user));
         this._peers.addEventListener('connectionclosed', user => {
             if(this._architecture.value === 'mesh'){
-                this._videoMixer.removeMedia('peers-'+user);
-                this._audioMixer.removeMedia('peers-'+user);
-                this._speechDetection.removeMedia('peers-'+user);
-                this._updateDisplayedStream();
+                this._speechDetection.removeMedia(user);
+                this._hideTrackOfUser(user)
             }
         });
-        this.addEventListener('mediachanged', () => this._updateDisplayedStream())
+        this._handleArchitectureSwitch(this._architecture.value);
+        this._displayEveryTrack();
     }
 
     /**
@@ -118,6 +80,19 @@ class Conference extends Listenable(){
     }
 
     /**
+     * @private
+     * */
+    _removeEventListeners(){
+        ['mesh', 'sfu'].forEach(architecture => {
+            const eventToFnMapping = {trackadded: this._addTrackHandler.bind(this), trackremoved: this._removeTrackHandler.bind(this)};
+            Object.keys(eventToFnMapping).forEach(e => this._getArchitectureHandler(architecture).removeEventListener(e, eventToFnMapping[e]));
+        });
+        this._getArchitectureHandler('mcu').removeEventListener('trackadded', "track => this._displayTrackOfUser('mcu', track)");
+    }
+
+
+
+    /**
      * when notified to switch to another architecture, use the next architecture model to transmit and receive media and display it
      * @private
      * */
@@ -126,27 +101,49 @@ class Conference extends Listenable(){
         this._architecture.value = newArchitecture;
         this._addedMedia.forEach(m => this._getArchitectureHandler(newArchitecture).addMedia(m));
         if(newArchitecture === 'mesh'){
-            this._clearLocalMediaProcessors();
-            // TODO: make this more standardized by using it like sfu or mcu, maybe via track.meta
-            this._getArchitectureHandler('mesh').users.forEach(user => {
-                this._getArchitectureHandler('mesh').get(user).tracks.forEach(track => {
-                    this._addTrackToLocalMediaProcessors(track, user)
-                });
-            });
-            this._addedMedia.forEach(m => this._addLocalMediaToLocalMediaProcessors(m));
+            this._multipleIncomingConnectionsSwitch();
         }else if(newArchitecture === 'sfu'){
-            this._clearLocalMediaProcessors();
-            this._getArchitectureHandler('sfu').tracks.forEach(track => {
-                this._addTrackToLocalMediaProcessors(track, track.meta);
-            });
-            this._addedMedia.forEach(m => this._addLocalMediaToLocalMediaProcessors(m));
+            this._multipleIncomingConnectionsSwitch();
         }else if(newArchitecture === 'mcu'){
+            this._clearDisplay();
+            this._removeEventListeners();
+            const video = this._createVideoElement('mcu');
+            video.srcObject = this._getArchitectureHandler('mcu').streams[0];
+            video.style.width = "100%";
+            video.style.height = "100%";
+            video.style.zIndex = "1";
+            this._display.appendChild(video);
+            this._getArchitectureHandler('mcu').addEventListener('trackadded', track => this._displayTrackOfUser('mcu', track));
             this.dispatchEvent('mediachanged', []);
         }
-        this._updateDisplayedStream();
         this._getArchitectureHandler(previousArchitecture).removeMedia();
         this.dispatchEvent('architectureswitched', [newArchitecture, previousArchitecture]);
     }
+
+
+    _multipleIncomingConnectionsSwitch(){
+        this._clearDisplay();
+        this._removeEventListeners();
+        this._displayOwnMedia();
+        this._displayEveryTrack();
+        this._getArchitectureHandler().addEventListener('trackadded', this._addTrackHandler.bind(this));
+        this._getArchitectureHandler().addEventListener('trackremoved', this._removeTrackHandler.bind(this));
+    }
+
+    _addTrackHandler(track){
+        if(track.meta){
+            if(this._verbose) this._logger.log('add track for '+track.meta+' to conference');
+            this._displayTrackOfUser(track.meta, track);
+            if(track.kind === "audio") this._speechDetection.addMedia(track, track.meta);
+        }else{
+            track.addEventListener('metachanged', () => this._addTrackHandler(track));
+        }
+    }
+
+    _removeTrackHandler(track){
+        if(track.meta) this._hideTrackOfUser(track.meta, track);
+    }
+
 
 
     /**
@@ -166,7 +163,10 @@ class Conference extends Listenable(){
     _handleUserDisconnected(user){
         this.dispatchEvent('userdisconnected', [user]);
         if(this._architecture.value === 'mesh'){
-            if(this._getArchitectureHandler('mesh').get(user)) this._getArchitectureHandler('mesh').get(user).close();
+            if(this._getArchitectureHandler('mesh').get(user)) this._getArchitectureHandler('mesh').get(user).close()
+        }
+        if(this._architecture.value !== 'mcu'){
+            this._hideTrackOfUser(user);
         }
     }
 
@@ -211,36 +211,17 @@ class Conference extends Listenable(){
         return this._architecture.prevValue();
     }
 
-    /**
-     * @private
-     * */
-    _clearLocalMediaProcessors(){
-        this._videoMixer.removeMedia();
-        this._speechDetection.removeMedia();
-        this._audioMixer.removeMedia();
-    }
 
-    /**
-     * @private
-     * */
-    _addTrackToLocalMediaProcessors(track, id){
-        if(track.kind === "video"){
-            this._videoMixer.addMedia(track, id)
-        }else{
-            this._audioMixer.addMedia(track, id);
-            this._speechDetection.addMedia(track, id)
-        }
-    }
 
     /**
      * The stream of the conference
-     * @returns MediaStream The mixed & ready stream to display
+     * @returns MediaStream a mediastream containing all received media
      * */
     get out(){
         if(this._architecture.value === 'mcu'){
             return this._mcu.streams[0];
         }else{
-            return new MediaStream([this._videoMixer.outputTrack, this._audioMixer.outputTrack]);
+            return new MediaStream([this._getArchitectureHandler().tracks])
         }
     }
 
@@ -269,38 +250,23 @@ class Conference extends Listenable(){
     async addMedia(m){
         if(!m.meta) m.meta = this._name;
         this._getArchitectureHandler().addMedia(m);
-        this._addLocalMediaToLocalMediaProcessors(m);
         this._addedMedia.push(m);
-        this._updateDisplayedStream();
+        this._speechDetection.addMedia(m, this._name);
+        if(m instanceof MediaStream){
+            m.getTracks().forEach(tr => this._displayTrackOfUser(this._name, tr));
+        }else{
+            this._displayTrackOfUser(this._name, m);
+        }
     }
 
-    /**
-     * remove media from the conference
-     * @param {String|MediaStream|MediaStreamTrack} [m="*"] the media to remove. Can be a media type like audio, video or "*" for all, a track or a stream
-     * */
-    removeMedia(m = "*"){
-        if(m instanceof MediaStream){
-            m.getTracks().forEach(track => {
-                this._getArchitectureHandler().removeMedia(track);
-                this._removeLocalMediaFromLocalMediaProcessors(m);
-            })
-        }else if(m instanceof MediaStreamTrack){
-            this._getArchitectureHandler().removeMedia(m);
-            this._removeLocalMediaFromLocalMediaProcessors(m)
-        }else if(typeof m === "string" && ["video", "audio", "*"].indexOf(m.toLowerCase()) >= 0){
-            m = m.toLowerCase();
-            this._getArchitectureHandler().removeMedia(m);
-            this._removeLocalMediaFromLocalMediaProcessors(m);
-        }else{
-            console.log('unknown media type', m)
-        }
+    _removeMediaFromAdded(m){
         this._addedMedia = this._addedMedia.filter(added => {
             if(typeof m === "string"){
                 m = m.toLocaleLowerCase();
                 if(added instanceof MediaStreamTrack){
                     return added.kind !== m || m !== "*"
                 }else if(added instanceof MediaStream){
-                    added.getTracks().filter(track => track.kind !== m || m !== "*").forEach(track => added.removeTrack(track))
+                    added.getTracks().filter(track => track.kind !== m || m !== "*").forEach(track => added.removeTrack(track));
                     return added.getTracks().length > 0
                 }
             }else if(m instanceof MediaStream){
@@ -323,41 +289,133 @@ class Conference extends Listenable(){
     }
 
     /**
-     * @private
+     * remove media from the conference
+     * @param {String|MediaStream|MediaStreamTrack} [m="*"] the media to remove. Can be a media type like audio, video or "*" for all, a track or a stream
      * */
-    _addLocalMediaToLocalMediaProcessors(m){
-        if(this._architecture.value !== 'mcu'){
-            this._speechDetection.addMedia(m, this._name);
-            this._videoMixer.addMedia(m, this._name);
-        }
-    }
-
-    /**
-     * @private
-     * */
-    _removeLocalMediaFromLocalMediaProcessors(m){
+    removeMedia(m = "*"){
         if(m instanceof MediaStream){
             m.getTracks().forEach(track => {
-                if(track.kind === "video"){
-                    this._videoMixer.removeMedia(track)
-                }else{
-                    this._audioMixer.removeMedia(track);
-                    this._speechDetection.removeMedia(track);
-                }
+                this._getArchitectureHandler().removeMedia(track);
+                if(this._architecture.value !== 'mcu') this._hideTrackOfUser(this._name, track);
             })
+        }else if(m instanceof MediaStreamTrack){
+            this._getArchitectureHandler().removeMedia(m);
+            if(this._architecture.value !== 'mcu') this._hideTrackOfUser(this._name, m);
         }else if(typeof m === "string" && ["video", "audio", "*"].indexOf(m.toLowerCase()) >= 0){
             m = m.toLowerCase();
             this._getArchitectureHandler().removeMedia(m);
-            if(m === "*" || m === "video") {
-                this._videoMixer.removeMedia();
+            const el = this._display.querySelector('#'+this._displayId(this._name));
+            if(el) el.srcObject.getTracks().filter(tr => m === '*' || tr.kind === m).forEach(tr => this._hideTrackOfUser(this._name, tr));
+        }else{
+            console.log('unknown media type', m)
+        }
+        this._removeMediaFromAdded(m);
+    }
+
+    _createUpdateInterval(){
+        setInterval(() => {
+            if(this._architecture.value !== 'mcu' && this._display){
+                const height = display.getBoundingClientRect().height;
+                const width = display.getBoundingClientRect().width;
+                const smallVideoWidth = 80;
+                const smallVideoHeight = 60;
+                const silence = this._speechDetection.silence;
+                this._display.style.backgroundColor = silence ? "rgb(20,20,20)" : "rgb(100,200,250)";
+                const noiseOffset = 5;
+                const silenceOffset = 2;
+                let big = this._name;
+                let speaker = this._speechDetection.lastSpeaker;
+                if(speaker && this._display.querySelector('#'+this._displayId(speaker))){
+                    big = speaker;
+                }
+                const bigVideo = this._display.querySelector('#'+this._displayId(big));
+                if(bigVideo){
+                    bigVideo.style.zIndex = "1";
+                    bigVideo.style.height = (silence ? (height - 2*silenceOffset) : (height - 2*noiseOffset))+"px";
+                    bigVideo.style.width = (silence ? (width - 2*silenceOffset) : (width - 2*noiseOffset))+"px";
+                    bigVideo.style.left = (silence ? silenceOffset : noiseOffset)+"px";
+                    bigVideo.style.top = (silence ? silenceOffset : noiseOffset)+"px";
+                }
+                this._peers.users.concat([this._name]).filter(u => u !== big).sort().forEach((u, i) => {
+                    const smallVideo = this._display.querySelector('#'+this._displayId(u));
+                    if(smallVideo){
+                        smallVideo.style.zIndex = "2";
+                        smallVideo.style.width = smallVideoWidth+"px";
+                        smallVideo.style.height = smallVideoHeight+"px";
+                        smallVideo.style.left = (((smallVideoWidth+1) * i)+noiseOffset)+"px";
+                        smallVideo.style.top = (height-(smallVideoHeight+noiseOffset))+"px";
+                    }
+                });
             }
-            if(m === "*" || m === "audio") {
-                this._audioMixer.removeMedia();
-                this._speechDetection.removeMedia()
-            }
+        }, 100);
+    }
+
+    _displayId(user){
+        return '__display-'+user;
+    }
+
+    _displayTrackOfUser(user, track){
+        console.log("add track of user ",user,track, this._display);
+        if(!this._display) return;
+        const id = this._displayId(user);
+        let video = this._display.querySelector('#'+id);
+        if(!video){
+            video = this._createVideoElement(id);
+            if(this._name === user) video.muted = true;
+            this._display.appendChild(video);
+        }
+        video.srcObject.getTracks().filter(tr => track.kind === tr.kind).forEach(tr => video.srcObject.removeTrack(tr));
+        video.srcObject.addTrack(track);
+    }
+
+    _hideTrackOfUser(user, track){
+        if(!this._display) return;
+        const id = this._displayId(user);
+        let video = this._display.querySelector('#'+id);
+        if(video){
+            if(track) video.srcObject.getTracks().filter(tr => tr.id === track.id).forEach(tr => video.srcObject.removeTrack(tr));
+            else video.parentNode.removeChild(video);
         }
     }
 
+    _displayEveryTrack(){
+        if(this._architecture.value === "mesh"){
+            this._getArchitectureHandler("mesh").users.forEach(user => {
+                this._getArchitectureHandler("mesh").get(user).tracks.forEach(tr => this._displayTrackOfUser(user, tr))
+            });
+        }else if(this._architecture.value === "sfu"){
+            this._getArchitectureHandler("sfu").tracks.filter(tr => tr.meta).forEach(tr => this._displayTrackOfUser(tr.meta, tr));
+        }else if(this._architecture.value === "mcu"){
+            this._getArchitectureHandler("mcu").tracks.forEach(tr => this._displayTrackOfUser('mcu', tr));
+        }
+    }
+
+    _displayOwnMedia(){
+        this._addedMedia.forEach(m => {
+            if(m instanceof MediaStreamTrack) this._displayTrackOfUser(this._name, m);
+            if(m instanceof MediaStream) m.getTracks().forEach(tr => this._displayTrackOfUser(this._name, tr));
+        });
+    }
+
+    _clearDisplay(){
+        if(this._display) this._display.innerHTML = "";
+    }
+
+
+    _createVideoElement(id){
+        const video = document.createElement('video');
+        video.setAttribute('id', id);
+        video.autoplay = true;
+        video.poster = "";
+        video.srcObject = new MediaStream([]);
+        video.style.zIndex = "0";
+        video.style.height = "60px";
+        video.style.width = "80px";
+        video.style.left = "0px";
+        video.style.top = "0px";
+        video.style.position = "absolute";
+        return video;
+    }
 
     /**
      * define inside which element the conference should be displayed on
@@ -367,20 +425,14 @@ class Conference extends Listenable(){
     displayOn(element){
         if(typeof element === 'string') element = document.querySelector(element);
         this._display = element;
+        this._display.style.position = "relative";
+        this._display.style.overflow = "hidden";
+        this._display.style.left = "0px";
+        this._display.style.top = "0px";
         if(this._verbose) this._logger.log('display output inside', element);
-        this._updateDisplayedStream();
+        this._handleArchitectureSwitch(this._architecture.value);
     }
 
-
-    /**
-     * @private
-     * */
-    _updateDisplayedStream(){
-        if(this._display){
-            if(this._verbose) this._logger.log('updated display');
-            this._display.srcObject = this.out;
-        }
-    }
 
     /**
      * Get the number of media objects that you added. This is not equal to the number of MediaStreamTracks, since added MediaStreams also count just as one
@@ -404,6 +456,7 @@ class Conference extends Listenable(){
     close(){
         [this._peers, this._sfu, this._mcu].forEach(architecture => architecture.close());
         this._addedMedia = [];
+        clearInterval(this._updateInterval);
     }
 
     /**

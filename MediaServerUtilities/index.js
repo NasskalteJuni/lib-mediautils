@@ -7,7 +7,7 @@ const SpeechDetection = require('./SpeechDetection.js');
 const Transcriber = require('./Transcriber.js');
 const VideoMixingConfiguration = require('./VideoMixingConfiguration.js');
 const Signaler = require('./Signaler.js');
-const Conference = require('./ConferenceWithLocalMixing.js');
+const Conference = require('./ConferenceWithoutLocalMixing.js');
 const PlaceHolderMediaGenerator = require('./PlaceholderMediaGenerator.js');
 const wrapTunnelAsSignaler = require('./TunnelSignaler.js');
 

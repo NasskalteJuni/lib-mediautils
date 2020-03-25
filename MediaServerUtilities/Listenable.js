@@ -33,18 +33,19 @@ const Listenable = (superclass=Object) => class extends superclass{
     /**
      * stop triggering a registered function / unregister a formerly given callback
      * @param {string} event The event name to listen for
-     * @param {EventHandlerFunction} fn The registered function
+     * @param {EventHandlerFunction|String} fn The registered function
      * @function
      * @name Listenable#removeEventListener
      * */
     removeEventListener(event, fn, all=false){
         event = event.toLowerCase();
-        if(typeof fn !== "function") throw new Error("Argument 1 is not of type function");
+        const compareFn = (a, b) => a.toString().replace(/\s/g, '') === b.toString().replace(/\s/g, '');
+        if(typeof fn !== "function" && typeof fn !== "string") throw new Error("Argument 1 is not of type function: "+(typeof fn));
         if(this._listeners[event] instanceof Array){
             if(all){
-                this._listeners[event] = this._listeners[event].filter(listener => listener.toString() !== fn.toString());
+                this._listeners[event] = this._listeners[event].filter(listener => compareFn(listener, fn));
             }else{
-                const i = this._listeners[event].findIndex(listener => listener.toString() === fn.toString());
+                const i = this._listeners[event].findIndex(listener => compareFn(listener, fn));
                 if(i !== -1) this._listeners[event].splice(i, 1);
             }
         }
