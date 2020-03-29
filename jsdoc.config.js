@@ -1,5 +1,7 @@
+"use strict";
+
 module.exports = {
-  "plugins": [],
+  "plugins": ["plugins/markdown"],
   "recurseDepth": 10,
   "source": {
     "include": ["../../MediaServerUtilities/"],
@@ -16,4 +18,4 @@ module.exports = {
     "cleverLinks": true,
     "monospaceLinks": true
   }
-}
+};
