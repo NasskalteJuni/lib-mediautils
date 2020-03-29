@@ -107,7 +107,7 @@ class Conference extends Listenable(){
         }else if(newArchitecture === 'mcu'){
             this._clearDisplay();
             this._removeEventListeners();
-            const video = this._createVideoElement('mcu');
+            const video = this._createVideoElement(this._displayId('mcu'));
             video.srcObject = this._getArchitectureHandler('mcu').streams[0];
             video.style.width = "100%";
             video.style.height = "100%";
@@ -248,6 +248,7 @@ class Conference extends Listenable(){
      * @param {MediaStream|MediaStreamTrack} m The media to add. This can be a stream or a single track
      * */
     async addMedia(m){
+        console.log('added media', m);
         if(!m.meta) m.meta = this._name;
         this._getArchitectureHandler().addMedia(m);
         this._addedMedia.push(m);
@@ -364,6 +365,7 @@ class Conference extends Listenable(){
             if(this._name === user) video.muted = true;
             this._display.appendChild(video);
         }
+        if(!video.srcObject) video.srcObject = new MediaStream([]);
         video.srcObject.getTracks().filter(tr => track.kind === tr.kind).forEach(tr => video.srcObject.removeTrack(tr));
         video.srcObject.addTrack(track);
     }
