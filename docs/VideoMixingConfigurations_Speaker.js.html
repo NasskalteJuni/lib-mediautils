@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: VideoMixingConfigurations/Speaker.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: VideoMixingConfigurations/Speaker.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const VideoMixingConfiguration = require('../VideoMixingConfiguration');
+
+/**
+ * A video mixing configuration that shows the current speaker as a big background image and other participants in little images on the bottom.
+ * Also indicates if someone is speaking right now
+ * @extends VideoMixingConfiguration
+ * @class
+ * */
+class Speaker extends VideoMixingConfiguration{
+
+    /**
+     * @param {SpeechDetection} speechDetection A speechDetection object to use to determine who is speaking right now. The media to detect must be added to the speech detection
+     * @param {Number} [priority=0] The priority of this config
+     * @param {Boolean} [applicable=true] if this config is usable. Should work with every number of conference members, therefore defaults to true
+     * */
+    constructor(speechDetection, priority = 0, applicable = true){
+        // check if the given id is speaking now, or if everyone is silent
+        const silenceOffset = 2;
+        const noiseOffset = 5;
+        const smallFrameWidth = 80;
+        const smallFrameHeight = 60;
+        const smallFrameOffset = 5;
+        const idIsNowSpeaking = (id, index) => speechDetection.lastSpeaker === id  || (speechDetection.lastSpeaker === null &amp;&amp; index === 0);
+        const frameX = stats => {
+            if(idIsNowSpeaking(stats.id, stats.drawIndex)){
+                return speechDetection.silence ? silenceOffset : noiseOffset;
+            }else{
+                return smallFrameOffset + Math.max(0, stats.drawIndex-1)*smallFrameWidth;
+            }
+        };
+        const frameY = stats => {
+            if(idIsNowSpeaking(stats.id, stats.drawIndex)){
+                return speechDetection.silence ? silenceOffset : noiseOffset;
+            }else{
+                return stats.height - smallFrameHeight - noiseOffset;
+            }
+        };
+        const frameWidth = stats => {
+            if(idIsNowSpeaking(stats.id, stats.drawIndex)){
+                return speechDetection.silence ? stats.width - silenceOffset*2 : stats.width - noiseOffset*2;
+            }else{
+                return smallFrameWidth;
+            }
+        };
+        const frameHeight = stats => {
+            if(idIsNowSpeaking(stats.id, stats.drawIndex)){
+                return speechDetection.silence ? stats.height - silenceOffset*2 : stats.height - noiseOffset*2;
+            }else{
+                return smallFrameHeight;
+            }
+        };
+        super({
+            applicable,
+            priority,
+            background: () => speechDetection.silence ? 'rgb(0,0,0)' : 'rgb(100,200,250)',
+            positions: {
+                x: frameX,
+                y: frameY,
+                width: frameWidth,
+                height: frameHeight,
+                zIndex: s => idIsNowSpeaking(s.id, s.drawIndex) ? 0 : 1
+            }
+        });
+    }
+}
+
+module.exports = Speaker;</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="AudioMixer.html">AudioMixer</a></li><li><a href="BrowserEnvironment.html">BrowserEnvironment</a></li><li><a href="Conference.html">Conference</a></li><li><a href="ConferenceWithLocalMixing.html">ConferenceWithLocalMixing</a></li><li><a href="Connection.html">Connection</a></li><li><a href="ConnectionManager.html">ConnectionManager</a></li><li><a href="Grid.html">Grid</a></li><li><a href="Line.html">Line</a></li><li><a href="Middle.html">Middle</a></li><li><a href="PlaceholderMediaGenerator.html">PlaceholderMediaGenerator</a></li><li><a href="Recorder.html">Recorder</a></li><li><a href="Signaler.html">Signaler</a></li><li><a href="Speaker.html">Speaker</a></li><li><a href="SpeechDetection.html">SpeechDetection</a></li><li><a href="Transcriber.html">Transcriber</a></li><li><a href="Tunnel.html">Tunnel</a></li><li><a href="VideoMixer.html">VideoMixer</a></li><li><a href="VideoMixingConfiguration.html">VideoMixingConfiguration</a></li></ul><h3>Interfaces</h3><ul><li><a href="Listenable.html">Listenable</a></li><li><a href="MediaConsuming.html">MediaConsuming</a></li></ul><h3>Global</h3><ul><li><a href="global.html#wrapTunnelAsSignaler">wrapTunnelAsSignaler</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.3</a> on Sun Mar 29 2020 15:45:56 GMT+0200 (GMT+02:00)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

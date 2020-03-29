@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: PlaceholderMediaGenerator.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: PlaceholderMediaGenerator.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Utility to generate placeholder media without using a web cam or video/audio files
+ * @class
+ * */
+class PlaceholderMediaGenerator{
+
+        /**
+         * create a new Media Generator
+         * @param {Object} [settings]
+         * @param {Boolean} [settings.enable=false] if the generated audio should actually make noise and the video should be more than just black
+         * */
+        constructor({enable = false, audioWave = "sine", audioFrequency = 440, fps=10} = {}){
+            this._audio = this._generateAudio(enable, audioFrequency, audioWave);
+            this._video = this._generateVideo(enable, fps);
+        }
+
+        /**
+         * a generated MediaStream
+         * @readonly
+         * */
+        get out(){
+            return new MediaStream([this._video, this._audio]);
+        }
+
+        /**
+         * a generated audio MediaStreamTrack
+         * @readonly
+         * */
+        get audioTrack(){
+            return this._audio;
+        }
+
+        /**
+         * a generated video MediaStreamTrack
+         * @readonly
+         * */
+        get videoTrack(){
+            return this._video;
+        }
+
+        /**
+         * create a disabled (=will not be played on speakers) beep sound
+         * @param {Boolean} [enabled=false]
+         * @param {AudioParam|Number} [frequency=440]
+         * @param {PeriodicWave|String} [type="sine"]
+         * @private
+         * */
+        _generateAudio(enabled = false, frequency= 440, type = "sine"){
+            console.log("create "+(enabled ? "hearable" : "muted")+" audio of "+frequency+" hertz in form of a "+type+" wave");
+            let ctx = new AudioContext(), oscillator = ctx.createOscillator();
+            oscillator.frequency.setValueAtTime(frequency, ctx.currentTime);
+            oscillator.type = type;
+            let dst = oscillator.connect(ctx.createMediaStreamDestination());
+            oscillator.start();
+            return Object.assign(dst.stream.getAudioTracks()[0], {enabled});
+        }
+
+        /**
+         * create a disabled (=always black and no new frames) video stream
+         * @param {Boolean} [enabled=false]
+         * @param {Object} [dimensions={width:360, height:420}] which dimensions the generated video stream should have
+         * @param {Number} [fps=10] number of generated frames per second
+         * */
+        _generateVideo(enabled = false, fps = 10, dimensions = {width: 360, height: 420}){
+            console.log("created "+(enabled ? "visible" : "muted")+" video with "+fps+" frames per second for "+dimensions.width+"/"+dimensions.height);
+            let canvas = Object.assign(document.createElement("canvas"), dimensions);
+            let context = canvas.getContext('2d');
+            context.fillRect(0, 0, dimensions.width, dimensions.height);
+            if(enabled){
+                setInterval(() => {
+                    context.fillStyle = 'rgb('+Math.floor(Math.random()*255)+','+Math.floor(Math.random()*255)+','+Math.floor(Math.random()*255)+')';
+                    context.fillRect(0,0, dimensions.width, dimensions.height);
+                },1000/fps);
+            }
+            let stream = canvas.captureStream();
+            return Object.assign(stream.getVideoTracks()[0], {enabled});
+        }
+}
+
+module.exports = PlaceholderMediaGenerator;</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="AudioMixer.html">AudioMixer</a></li><li><a href="BrowserEnvironment.html">BrowserEnvironment</a></li><li><a href="Conference.html">Conference</a></li><li><a href="ConferenceWithLocalMixing.html">ConferenceWithLocalMixing</a></li><li><a href="Connection.html">Connection</a></li><li><a href="ConnectionManager.html">ConnectionManager</a></li><li><a href="Grid.html">Grid</a></li><li><a href="Line.html">Line</a></li><li><a href="Middle.html">Middle</a></li><li><a href="PlaceholderMediaGenerator.html">PlaceholderMediaGenerator</a></li><li><a href="Recorder.html">Recorder</a></li><li><a href="Signaler.html">Signaler</a></li><li><a href="Speaker.html">Speaker</a></li><li><a href="SpeechDetection.html">SpeechDetection</a></li><li><a href="Transcriber.html">Transcriber</a></li><li><a href="Tunnel.html">Tunnel</a></li><li><a href="VideoMixer.html">VideoMixer</a></li><li><a href="VideoMixingConfiguration.html">VideoMixingConfiguration</a></li></ul><h3>Interfaces</h3><ul><li><a href="Listenable.html">Listenable</a></li><li><a href="MediaConsuming.html">MediaConsuming</a></li></ul><h3>Global</h3><ul><li><a href="global.html#wrapTunnelAsSignaler">wrapTunnelAsSignaler</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.3</a> on Sun Mar 29 2020 15:45:56 GMT+0200 (GMT+02:00)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

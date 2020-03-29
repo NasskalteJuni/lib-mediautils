@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: Tunnel.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: Tunnel.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * A class that tunnels between the BrowserEnvironment module and its inside.
+ * Only intended to be used together with BrowserEnvironment!
+ * @protected
+ * @class
+ * */
+class Tunnel{
+
+    /**
+     * Creates a new, but still closed tunnel instance
+     * @param {BrowserEnvironment} browserEnvironment The BrowserEnvironment that uses the Tunnel to communicate with the opened web page
+     * */
+    constructor(browserEnvironment){
+        this._instance = browserEnvironment._instance;
+        this._exportHandlers = {};
+        this._anyExportHandler = () => {};
+        this._state = "closed";
+    }
+
+    /**
+     * opens the Tunnel for bidirectional communication with the web page
+     * */
+    async open(){
+        if(this._state === "open") throw new Error("Tunnel is already open");
+        this._state = "open";
+        await this._instance.exposeFunction("Tunnel._handleExport", (type, serialized) => {
+            const serializable = JSON.parse(serialized);
+            if(this._exportHandlers[type]) this._exportHandlers[type](serializable);
+            this._anyExportHandler(serializable, type);
+        });
+        // expose _Tunnel into the browser context
+        await this._instance.evaluate(() => {
+            window["Tunnel"] = {
+                _importHandlers: {},
+                _anyImportHandler: () => {},
+                _handleImport: function(type, serialized){
+                    const serializable = JSON.parse(serialized);
+                    window["Tunnel"]._anyImportHandler(serializable);
+                    if(window["Tunnel"]._importHandlers[type] instanceof Array) window["Tunnel"]._importHandlers[type].forEach(cb => cb(serializable));
+                },
+                onImport: function(type, cb){
+                    if(arguments.length === 1){
+                        this._anyImportHandler = arguments[0];
+                    }else{
+                        if(!window["Tunnel"]._importHandlers[type]) window["Tunnel"]._importHandlers[type] = [];
+                        window["Tunnel"]._importHandlers[type].push(cb);
+                    }
+                },
+                doExport: function(type, serializable){
+                    window["Tunnel._handleExport"](type, JSON.stringify(serializable));
+                }
+            };
+        })
+    }
+
+    /**
+     * import a serializable object into the browser environment
+     * @param type [string] what kind of object you are importing
+     * @param serializable [any] anything serializable like numbers, strings, arrays to import into the context
+     * */
+    async doImport(type, serializable){
+        if(this._state === "closed") throw new Error("Tunnel is still closed");
+        return this._instance.evaluate((_t, _s) => window["Tunnel"]._handleImport(_t, _s), type, JSON.stringify(serializable))
+    }
+
+    /**
+     * register a callback function to react to something being exported from the browser environment
+     * @param type [string*] what kind will be exported
+     * @param cb [function] a handler that will receive the exported serializable
+     * */
+    onExport(type, cb){
+        if(arguments.length === 1) this._anyExportHandler = arguments[0];
+        else this._exportHandlers[type] = cb;
+    }
+
+}
+
+module.exports = Tunnel;</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="AudioMixer.html">AudioMixer</a></li><li><a href="BrowserEnvironment.html">BrowserEnvironment</a></li><li><a href="Conference.html">Conference</a></li><li><a href="ConferenceWithLocalMixing.html">ConferenceWithLocalMixing</a></li><li><a href="Connection.html">Connection</a></li><li><a href="ConnectionManager.html">ConnectionManager</a></li><li><a href="Grid.html">Grid</a></li><li><a href="Line.html">Line</a></li><li><a href="Middle.html">Middle</a></li><li><a href="PlaceholderMediaGenerator.html">PlaceholderMediaGenerator</a></li><li><a href="Recorder.html">Recorder</a></li><li><a href="Signaler.html">Signaler</a></li><li><a href="Speaker.html">Speaker</a></li><li><a href="SpeechDetection.html">SpeechDetection</a></li><li><a href="Transcriber.html">Transcriber</a></li><li><a href="Tunnel.html">Tunnel</a></li><li><a href="VideoMixer.html">VideoMixer</a></li><li><a href="VideoMixingConfiguration.html">VideoMixingConfiguration</a></li></ul><h3>Interfaces</h3><ul><li><a href="Listenable.html">Listenable</a></li><li><a href="MediaConsuming.html">MediaConsuming</a></li></ul><h3>Global</h3><ul><li><a href="global.html#wrapTunnelAsSignaler">wrapTunnelAsSignaler</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.3</a> on Sun Mar 29 2020 15:45:56 GMT+0200 (GMT+02:00)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

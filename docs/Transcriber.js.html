@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: Transcriber.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: Transcriber.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Utility to simplify transcribing of outgoing media. Intended to be added to a Connection instead of media
+ * */
+class Transcriber {
+
+    /**
+     * Create a transcriber for a given track who allows you to set up the peer connection with the given quality transcription
+     * */
+    constructor(trackOrKind, trackSettings = {}) {
+        this._trackOrKind = trackOrKind;
+        this._trackSettings = trackSettings;
+        this._kind = typeof trackOrKind === "string" ? trackOrKind : trackOrKind.kind;
+        this._qualities = {
+            full: {
+                video: {},
+                audio: {},
+            },
+            high: {
+                video: {
+                    "maxFramerate": 60
+                },
+                audio: {}
+            },
+            medium: {
+                video: {
+                    "maxFramerate": 30
+                },
+                audio: {},
+            },
+            low: {
+                video: {
+                    "maxFramerate": 15,
+                    "scaleResolutionDownBy": 2
+                },
+                audio: {},
+            },
+            micro: {
+                video: {
+                    "maxFramerate": 10,
+                    "scaleResolutionDownBy": 4,
+                    "maxBitrate": 8 * 1024 * 2,
+                },
+                audio: {
+                    "maxBitrate": 8 * 1024 * 4,
+                    // dtx: true // currently poor browser support, only moz ff >= v46
+                }
+            }
+        };
+    }
+
+    _mergeRtpSettingsForTrack(rtpOptions){
+        const trackSettingsCopy = Object.assign({}, this._trackSettings);
+        if(!trackSettingsCopy.sendEncodings){
+            trackSettingsCopy.sendEncodings = [rtpOptions];
+        }else{
+            trackSettingsCopy.sendEncodings.forEach(encoding => {
+                Object.keys(rtpOptions).forEach(key => {
+                    console.log(key, key in encoding);
+                    if (!(key in encoding)) encoding[key] = rtpOptions[key];
+                });
+            });
+        }
+        return trackSettingsCopy;
+    }
+
+    /**
+     * returns the track and the options to pass to addTransceiver.
+     * You may use this like peerConnection.addTransceiver(...myTranscriber.transcribe('medium'));
+     * @param quality [string] one of the quality settings of the transcriber (by default full, high, medium, low, micro)
+     * @returns [trackOrKind, settings]
+     * */
+    transcribe(quality){
+        quality = quality.toLowerCase();
+        if(Object.keys(this._qualities).indexOf(quality) === -1) throw new Error('Unsupported quality option');
+        return [this._trackOrKind, this._mergeRtpSettingsForTrack(this._qualities[quality][this._kind])];
+    }
+
+}
+
+module.exports = Transcriber;</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="AudioMixer.html">AudioMixer</a></li><li><a href="BrowserEnvironment.html">BrowserEnvironment</a></li><li><a href="Conference.html">Conference</a></li><li><a href="ConferenceWithLocalMixing.html">ConferenceWithLocalMixing</a></li><li><a href="Connection.html">Connection</a></li><li><a href="ConnectionManager.html">ConnectionManager</a></li><li><a href="Grid.html">Grid</a></li><li><a href="Line.html">Line</a></li><li><a href="Middle.html">Middle</a></li><li><a href="PlaceholderMediaGenerator.html">PlaceholderMediaGenerator</a></li><li><a href="Recorder.html">Recorder</a></li><li><a href="Signaler.html">Signaler</a></li><li><a href="Speaker.html">Speaker</a></li><li><a href="SpeechDetection.html">SpeechDetection</a></li><li><a href="Transcriber.html">Transcriber</a></li><li><a href="Tunnel.html">Tunnel</a></li><li><a href="VideoMixer.html">VideoMixer</a></li><li><a href="VideoMixingConfiguration.html">VideoMixingConfiguration</a></li></ul><h3>Interfaces</h3><ul><li><a href="Listenable.html">Listenable</a></li><li><a href="MediaConsuming.html">MediaConsuming</a></li></ul><h3>Global</h3><ul><li><a href="global.html#wrapTunnelAsSignaler">wrapTunnelAsSignaler</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.3</a> on Sun Mar 29 2020 15:45:56 GMT+0200 (GMT+02:00)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
